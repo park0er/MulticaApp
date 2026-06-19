@@ -1206,6 +1206,20 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(requests.map(\.query), ["workspace_id=w1", "workspace_id=w1"])
     }
 
+    func test_getAttachmentContent_fetchesPlainTextPreviewBody() async throws {
+        MockURLProtocol.handler = { req in
+            XCTAssertEqual(req.httpMethod, "GET")
+            XCTAssertEqual(req.url?.path, "/api/attachments/att1/content")
+            XCTAssertEqual(req.url?.query, "workspace_id=w1")
+            XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer test-token")
+            return Self.response(req, body: "# Preview\n\nHello".data(using: .utf8)!)
+        }
+
+        let content = try await client.getAttachmentContent(id: "att1", workspaceId: "w1")
+
+        XCTAssertEqual(content, "# Preview\n\nHello")
+    }
+
     func test_createIssue_sendsAttachmentIds() async throws {
         var body: [String: Any] = [:]
         MockURLProtocol.handler = { req in

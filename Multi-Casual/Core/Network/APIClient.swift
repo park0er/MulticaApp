@@ -850,6 +850,68 @@ public final class APIClient: @unchecked Sendable {
         )
     }
 
+    public func getAttachmentContent(id: String, workspaceId: String? = nil) async throws -> String {
+        let path = "api/attachments/\(id)/content"
+        guard var components = URLComponents(
+            url: baseURL.appendingPathComponent(path),
+            resolvingAgainstBaseURL: false
+        ) else {
+            throw APIError.serverError(-1, body: "Invalid base URL: \(baseURL) + \(path)")
+        }
+        let queryItems = try await queryItemsWithWorkspaceIfNeeded(
+            path: path,
+            queryItems: workspaceQuery(workspaceId)
+        )
+        if !queryItems.isEmpty {
+            components.queryItems = queryItems
+        }
+        guard let url = components.url else {
+            throw APIError.serverError(-1, body: "Invalid URL components for path \(path)")
+        }
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue(UUID().uuidString, forHTTPHeaderField: "X-Request-ID")
+        req.setValue("ios", forHTTPHeaderField: "X-Client-Platform")
+        req.setValue(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "debug",
+                     forHTTPHeaderField: "X-Client-Version")
+        req.setValue(ProcessInfo.processInfo.operatingSystemVersionString, forHTTPHeaderField: "X-Client-OS")
+        if let token = tokenProvider() {
+            req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        if let workspaceSlug = await workspaceSlugProvider(), !workspaceSlug.isEmpty {
+            req.setValue(workspaceSlug, forHTTPHeaderField: "X-Workspace-Slug")
+        }
+
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await responseData(for: req)
+        } catch {
+            if let apiError = error as? APIError {
+                throw apiError
+            }
+            throw APIError.networkError(error)
+        }
+
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.serverError(-1, body: "Non-HTTP response: \(response)")
+        }
+        switch http.statusCode {
+        case 200...299:
+            break
+        case 401:
+            throw APIError.unauthorized
+        case 404:
+            throw APIError.notFound
+        default:
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw APIError.serverError(http.statusCode, body: body)
+        }
+
+        return String(data: data, encoding: .utf8) ?? String(decoding: data, as: UTF8.self)
+    }
+
     private func multipartBody(
         boundary: String,
         file: (filename: String, data: Data, contentType: String),
