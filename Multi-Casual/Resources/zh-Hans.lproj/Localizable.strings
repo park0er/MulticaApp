@@ -322,3 +322,14 @@
 "This removes the project from the workspace. Linked issues stay available." = "这会从工作区中删除此项目，关联 Issues 会保留。";
 "You will need to sign in again to use this workspace." = "你需要重新登录才能使用此工作区。";
 "Mention" = "提及";
+"Audio Preview Coming Soon" = "音频预览即将支持";
+"Download" = "下载";
+"Image Preview Coming Soon" = "图片预览即将支持";
+"Open Original" = "打开原文件";
+"PDF Preview Coming Soon" = "PDF 预览即将支持";
+"Preview Unavailable" = "无法预览";
+"Preview Unsupported" = "暂不支持预览";
+"This file can still be opened or downloaded with another app." = "仍可用其他 App 打开或下载此文件。";
+"This file is too large for inline preview. Download it to view the original." = "文件过大，无法内联预览。可下载后查看原文件。";
+"This file type is not supported for inline preview." = "此文件类型暂不支持内联预览。";
+"Video Preview Coming Soon" = "视频预览即将支持";

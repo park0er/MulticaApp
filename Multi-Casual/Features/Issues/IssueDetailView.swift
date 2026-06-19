@@ -20,6 +20,7 @@ public struct IssueDetailView: View {
     @State private var showDeleteAttachmentConfirmation = false
     @State private var pendingCancelTask: AgentTask?
     @State private var pendingDeleteAttachment: Attachment?
+    @State private var selectedPreviewAttachment: Attachment?
     @State private var selectedTranscript: AgentTranscriptSelection?
     @State private var issueReferenceTarget: IssueReferenceNavigationTarget?
     @State private var issueReferenceError: String?
@@ -69,6 +70,10 @@ public struct IssueDetailView: View {
         }
         .sheet(item: $selectedTranscript) { selection in
             AgentTranscriptView(taskId: selection.taskId, workspaceId: selection.workspaceId ?? viewModel?.resolvedWorkspaceId)
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(item: $selectedPreviewAttachment) { attachment in
+            AttachmentPreviewView(attachment: attachment, workspaceId: viewModel?.resolvedWorkspaceId)
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showEditIssue) {
@@ -315,7 +320,8 @@ public struct IssueDetailView: View {
             if !issue.attachments.isEmpty {
                 AttachmentListView(
                     attachments: issue.attachments,
-                    deletingAttachmentIds: vm.deletingAttachmentIds
+                    deletingAttachmentIds: vm.deletingAttachmentIds,
+                    onPreview: { selectedPreviewAttachment = $0 }
                 ) { attachment in
                     pendingDeleteAttachment = attachment
                     showDeleteAttachmentConfirmation = true
@@ -598,7 +604,8 @@ public struct IssueDetailView: View {
             },
             onDelete: { commentId in
                 await vm.deleteComment(commentId: commentId)
-            }
+            },
+            onPreviewAttachment: { selectedPreviewAttachment = $0 }
         )
     }
 
@@ -1400,6 +1407,7 @@ public struct CommentRowView: View {
     let onStartReply: (Comment) -> Void
     let onEdit: (String, String) async -> Bool
     let onDelete: (String) async -> Bool
+    let onPreviewAttachment: (Attachment) -> Void
 
     @State private var isEditing = false
     @State private var editDraft = ""
@@ -1416,7 +1424,8 @@ public struct CommentRowView: View {
         markdownContext: MarkdownRenderContext = .empty,
         onStartReply: @escaping (Comment) -> Void = { _ in },
         onEdit: @escaping (String, String) async -> Bool = { _, _ in false },
-        onDelete: @escaping (String) async -> Bool = { _ in false }
+        onDelete: @escaping (String) async -> Bool = { _ in false },
+        onPreviewAttachment: @escaping (Attachment) -> Void = { _ in }
     ) {
         self.comment = comment
         self.authorDisplayName = authorDisplayName ?? (comment.authorType == "agent" ? "Agent" : "Member")
@@ -1426,6 +1435,7 @@ public struct CommentRowView: View {
         self.onStartReply = onStartReply
         self.onEdit = onEdit
         self.onDelete = onDelete
+        self.onPreviewAttachment = onPreviewAttachment
     }
 
     public var body: some View {
@@ -1517,7 +1527,7 @@ public struct CommentRowView: View {
                 MarkdownText(comment.content, context: markdownContext).font(.body)
             }
             if !comment.attachments.isEmpty {
-                AttachmentListView(attachments: comment.attachments)
+                AttachmentListView(attachments: comment.attachments, onPreview: onPreviewAttachment)
             }
         }.padding(.horizontal).padding(.vertical, 6)
             .alert(AppStrings.localized("Delete Comment", language: appLanguage), isPresented: $showDeleteConfirmation) {
@@ -1786,6 +1796,7 @@ private struct SubscriberToggleRow: View {
 private struct AttachmentListView: View {
     let attachments: [Attachment]
     var deletingAttachmentIds: Set<String> = []
+    var onPreview: ((Attachment) -> Void)?
     var onDelete: ((Attachment) -> Void)?
 
     var body: some View {
@@ -1794,6 +1805,7 @@ private struct AttachmentListView: View {
                 AttachmentRowView(
                     attachment: attachment,
                     isDeleting: deletingAttachmentIds.contains(attachment.id),
+                    onPreview: onPreview,
                     onDelete: onDelete
                 )
             }
@@ -1828,12 +1840,19 @@ private struct LabelWrapView: View {
 private struct AttachmentRowView: View {
     let attachment: Attachment
     var isDeleting = false
+    var onPreview: ((Attachment) -> Void)?
     var onDelete: ((Attachment) -> Void)?
 
     var body: some View {
         HStack(spacing: 8) {
             Group {
-                if let url = URL(string: attachment.downloadUrl.isEmpty ? attachment.url : attachment.downloadUrl) {
+                if let onPreview {
+                    Button {
+                        onPreview(attachment)
+                    } label: {
+                        rowContent
+                    }
+                } else if let url = URL(string: attachment.downloadUrl.isEmpty ? attachment.url : attachment.downloadUrl) {
                     Link(destination: url) {
                         rowContent
                     }
@@ -1879,7 +1898,7 @@ private struct AttachmentRowView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            Image(systemName: "arrow.down.circle")
+            Image(systemName: onPreview == nil ? "arrow.down.circle" : "eye")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
