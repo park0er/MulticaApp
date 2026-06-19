@@ -30,7 +30,9 @@ struct RootView: View {
     var body: some View {
         Group {
             #if DEBUG
-            if ProcessInfo.processInfo.environment["MULTI_CASUAL_DEBUG_FORCE_LOGIN_SCREEN"] == "1" {
+            if ProcessInfo.processInfo.environment["MULTI_CASUAL_DEBUG_FORCE_HTML_PREVIEW"] == "1" {
+                HTMLAttachmentPreviewDebugScreen()
+            } else if ProcessInfo.processInfo.environment["MULTI_CASUAL_DEBUG_FORCE_LOGIN_SCREEN"] == "1" {
                 LoginView()
             } else if authSession.isLoading {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -137,6 +139,86 @@ struct RootView: View {
         }
     }
 }
+
+#if DEBUG
+private struct HTMLAttachmentPreviewDebugScreen: View {
+    @Environment(\.openURL) private var openURL
+    @State private var showSource = false
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                HTMLAttachmentPreview(html: Self.fixtureHTML) { url in
+                    openURL(url)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .opacity(showSource ? 0 : 1)
+                .allowsHitTesting(!showSource)
+                .accessibilityIdentifier("HTMLPreviewDebugRender")
+
+                if showSource {
+                    ScrollView([.vertical, .horizontal]) {
+                        Text(Self.fixtureHTML)
+                            .font(.system(.body, design: .monospaced))
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: true, vertical: true)
+                            .padding()
+                    }
+                    .background(Color(.systemBackground))
+                    .accessibilityIdentifier("HTMLPreviewDebugSource")
+                }
+            }
+            .navigationTitle("HTML Preview Debug")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(showSource ? "Render" : "Source") {
+                        showSource.toggle()
+                    }
+                    .accessibilityIdentifier("HTMLPreviewDebugSourceToggle")
+                }
+            }
+        }
+    }
+
+    private static let fixtureHTML = """
+    <!doctype html>
+    <html>
+    <head>
+      <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 24px; background: #fff7d6; color: #111; }
+        h1 { margin-top: 0; }
+        .tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+        button { border: 2px solid #111; background: white; padding: 10px 14px; font-weight: 700; border-radius: 8px; }
+        button.active { background: #003cff; color: white; }
+        .panel { border: 2px solid #111; padding: 18px; border-radius: 12px; background: white; min-height: 120px; }
+        .hidden { display: none; }
+      </style>
+    </head>
+    <body>
+      <h1>HTML preview fixture</h1>
+      <p id=\"status\">If this text is visible, WKWebView rendered HTML.</p>
+      <div class=\"tabs\">
+        <button id=\"tab-a\" class=\"active\" onclick=\"showTab('a')\">Tab A</button>
+        <button id=\"tab-b\" onclick=\"showTab('b')\">Tab B</button>
+      </div>
+      <div id=\"panel-a\" class=\"panel\">Panel A: initial content.</div>
+      <div id=\"panel-b\" class=\"panel hidden\">Panel B: JavaScript tab interaction works.</div>
+      <script>
+        function showTab(id) {
+          document.getElementById('tab-a').classList.toggle('active', id === 'a');
+          document.getElementById('tab-b').classList.toggle('active', id === 'b');
+          document.getElementById('panel-a').classList.toggle('hidden', id !== 'a');
+          document.getElementById('panel-b').classList.toggle('hidden', id !== 'b');
+          document.getElementById('status').textContent = 'Clicked ' + id.toUpperCase();
+        }
+      </script>
+    </body>
+    </html>
+    """
+}
+#endif
 
 #if DEBUG
 private struct DebugProjectDetailRoute: View {

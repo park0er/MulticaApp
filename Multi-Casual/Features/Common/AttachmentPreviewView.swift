@@ -37,6 +37,7 @@ public struct AttachmentPreviewView: View {
                             Button(showHTMLSource ? "Render" : "Source") {
                                 showHTMLSource.toggle()
                             }
+                            .accessibilityIdentifier("AttachmentPreviewSourceToggle")
                         }
                         if let url = downloadURL {
                             Button {
@@ -66,13 +67,18 @@ public struct AttachmentPreviewView: View {
             }
         case .html:
             loadedTextContent { text in
-                if showHTMLSource {
-                    TextAttachmentSourceView(content: text)
-                } else {
+                ZStack {
                     HTMLAttachmentPreview(html: text) { url in
                         openURL(url)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(showHTMLSource ? 0 : 1)
+                    .allowsHitTesting(!showHTMLSource)
                     .ignoresSafeArea(edges: .bottom)
+
+                    if showHTMLSource {
+                        TextAttachmentSourceView(content: text)
+                    }
                 }
             }
         case .text(let language):
@@ -223,7 +229,7 @@ private struct TextAttachmentSourceView: View {
                 Text(content)
                     .font(.system(.body, design: .monospaced))
                     .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: true, vertical: true)
             }
             .padding()
         }
@@ -244,16 +250,28 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.allowsInlineMediaPlayback = true
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
+        webView.isOpaque = true
+        webView.backgroundColor = .white
+        webView.scrollView.backgroundColor = .white
         webView.allowsBackForwardNavigationGestures = false
         webView.scrollView.keyboardDismissMode = .interactive
+        webView.scrollView.delaysContentTouches = false
+        webView.scrollView.canCancelContentTouches = true
+        webView.scrollView.isScrollEnabled = true
+        webView.evaluateJavaScript("document.documentElement.style.webkitTouchCallout = 'none'")
         return webView
     }
 
     public func updateUIView(_ webView: WKWebView, context: Context) {
-        guard context.coordinator.loadedHTML != html else { return }
+        if context.coordinator.loadedHTML == html && context.coordinator.loadedWebView === webView {
+            return
+        }
         context.coordinator.loadedHTML = html
+        context.coordinator.loadedWebView = webView
         webView.loadHTMLString(html, baseURL: nil)
     }
 
@@ -263,6 +281,7 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var loadedHTML: String?
+        var loadedWebView: WKWebView?
         private let openExternalURL: (URL) -> Void
 
         init(openExternalURL: @escaping (URL) -> Void) {
@@ -282,6 +301,18 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
                 openExternalURL(url)
             }
             decisionHandler(.cancel)
+        }
+
+        public func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            if let url = navigationAction.request.url {
+                openExternalURL(url)
+            }
+            return nil
         }
     }
 }
