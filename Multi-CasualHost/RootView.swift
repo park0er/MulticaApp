@@ -1,6 +1,7 @@
 import SwiftUI
 import UserNotifications
 import UIKit
+import WebKit
 import MultiCasual
 
 struct RootView: View {
@@ -143,40 +144,45 @@ struct RootView: View {
 #if DEBUG
 private struct HTMLAttachmentPreviewDebugScreen: View {
     @Environment(\.openURL) private var openURL
-    @State private var showSource = false
+    @State private var probeStatus = "pending"
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                HTMLAttachmentPreview(html: Self.fixtureHTML) { url in
+            ZStack(alignment: .bottom) {
+                HTMLAttachmentPreview(html: Self.fixtureHTML, debugProbe: runProbe) { url in
                     openURL(url)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .opacity(showSource ? 0 : 1)
-                .allowsHitTesting(!showSource)
                 .accessibilityIdentifier("HTMLPreviewDebugRender")
 
-                if showSource {
-                    ScrollView([.vertical, .horizontal]) {
-                        Text(Self.fixtureHTML)
-                            .font(.system(.body, design: .monospaced))
-                            .textSelection(.enabled)
-                            .fixedSize(horizontal: true, vertical: true)
-                            .padding()
-                    }
-                    .background(Color(.systemBackground))
-                    .accessibilityIdentifier("HTMLPreviewDebugSource")
-                }
+                Text(probeStatus)
+                    .font(.caption.monospaced())
+                    .padding(8)
+                    .background(.thinMaterial, in: Capsule())
+                    .padding(.bottom, 8)
+                    .accessibilityIdentifier("HTMLPreviewDebugProbeStatus")
             }
             .navigationTitle("HTML Preview Debug")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(showSource ? "Render" : "Source") {
-                        showSource.toggle()
-                    }
-                    .accessibilityIdentifier("HTMLPreviewDebugSourceToggle")
-                }
+        }
+    }
+
+    private func runProbe(_ webView: WKWebView) {
+        let script = """
+        (() => {
+          const tab = document.getElementById('tab-b');
+          if (!tab) { return 'missing-tab'; }
+          tab.click();
+          const status = document.getElementById('status')?.textContent || '';
+          const panel = document.getElementById('panel-b');
+          const panelVisible = panel && getComputedStyle(panel).display !== 'none';
+          return status + '|' + panelVisible;
+        })()
+        """
+        webView.evaluateJavaScript(script) { result, error in
+            let nextStatus = error?.localizedDescription ?? String(describing: result ?? "nil")
+            DispatchQueue.main.async {
+                probeStatus = nextStatus
             }
         }
     }

@@ -12,7 +12,6 @@ public struct AttachmentPreviewView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.appLanguage) private var appLanguage
     @State private var textState: AttachmentTextState = .idle
-    @State private var showHTMLSource = false
 
     private var previewKind: AttachmentPreviewKind {
         AttachmentPreviewKind(contentType: attachment.contentType, filename: attachment.filename)
@@ -33,12 +32,6 @@ public struct AttachmentPreviewView: View {
                         Button(AppStrings.localized("Done", language: appLanguage)) { dismiss() }
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
-                        if case .html = previewKind, textState.content != nil {
-                            Button(showHTMLSource ? "Render" : "Source") {
-                                showHTMLSource.toggle()
-                            }
-                            .accessibilityIdentifier("AttachmentPreviewSourceToggle")
-                        }
                         if let url = downloadURL {
                             Button {
                                 openURL(url)
@@ -67,19 +60,11 @@ public struct AttachmentPreviewView: View {
             }
         case .html:
             loadedTextContent { text in
-                ZStack {
-                    HTMLAttachmentPreview(html: text) { url in
-                        openURL(url)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .opacity(showHTMLSource ? 0 : 1)
-                    .allowsHitTesting(!showHTMLSource)
-                    .ignoresSafeArea(edges: .bottom)
-
-                    if showHTMLSource {
-                        TextAttachmentSourceView(content: text)
-                    }
+                HTMLAttachmentPreview(html: text) { url in
+                    openURL(url)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea(edges: .bottom)
             }
         case .text(let language):
             loadedTextContent { text in
@@ -240,11 +225,25 @@ private struct TextAttachmentSourceView: View {
 public struct HTMLAttachmentPreview: UIViewRepresentable {
     public let html: String
     public var openExternalURL: (URL) -> Void
+    #if DEBUG
+    public var debugProbe: ((WKWebView) -> Void)?
+    #endif
 
     public init(html: String, openExternalURL: @escaping (URL) -> Void) {
         self.html = html
         self.openExternalURL = openExternalURL
+        #if DEBUG
+        debugProbe = nil
+        #endif
     }
+
+    #if DEBUG
+    public init(html: String, debugProbe: ((WKWebView) -> Void)?, openExternalURL: @escaping (URL) -> Void) {
+        self.html = html
+        self.debugProbe = debugProbe
+        self.openExternalURL = openExternalURL
+    }
+    #endif
 
     public func makeUIView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
@@ -267,26 +266,58 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
     }
 
     public func updateUIView(_ webView: WKWebView, context: Context) {
-        if context.coordinator.loadedHTML == html && context.coordinator.loadedWebView === webView {
+        let renderableHTML = Self.renderableHTML(for: html)
+        if context.coordinator.loadedHTML == renderableHTML && context.coordinator.loadedWebView === webView {
             return
         }
-        context.coordinator.loadedHTML = html
+        context.coordinator.loadedHTML = renderableHTML
         context.coordinator.loadedWebView = webView
-        webView.loadHTMLString(html, baseURL: nil)
+        webView.loadHTMLString(renderableHTML, baseURL: Self.previewBaseURL)
     }
 
     public func makeCoordinator() -> Coordinator {
+        #if DEBUG
+        Coordinator(debugProbe: debugProbe, openExternalURL: openExternalURL)
+        #else
         Coordinator(openExternalURL: openExternalURL)
+        #endif
+    }
+
+    private static let previewBaseURL = URL(string: "https://attachment-preview.local/")!
+
+    private static func renderableHTML(for html: String) -> String {
+        guard html.range(of: "<base", options: [.caseInsensitive]) == nil,
+              let headRange = html.range(of: "<head", options: [.caseInsensitive]),
+              let headEnd = html[headRange.upperBound...].firstIndex(of: ">")
+        else {
+            return html
+        }
+        var rendered = html
+        rendered.insert(contentsOf: "<base href=\"\(previewBaseURL.absoluteString)\">", at: html.index(after: headEnd))
+        return rendered
     }
 
     public final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         var loadedHTML: String?
         var loadedWebView: WKWebView?
+        #if DEBUG
+        private let debugProbe: ((WKWebView) -> Void)?
+        #endif
         private let openExternalURL: (URL) -> Void
 
         init(openExternalURL: @escaping (URL) -> Void) {
+            #if DEBUG
+            self.debugProbe = nil
+            #endif
             self.openExternalURL = openExternalURL
         }
+
+        #if DEBUG
+        init(debugProbe: ((WKWebView) -> Void)?, openExternalURL: @escaping (URL) -> Void) {
+            self.debugProbe = debugProbe
+            self.openExternalURL = openExternalURL
+        }
+        #endif
 
         public func webView(
             _ webView: WKWebView,
@@ -297,10 +328,16 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
                 decisionHandler(.allow)
                 return
             }
-            if let url = navigationAction.request.url, !url.isFileURL {
-                openExternalURL(url)
+            if Self.isSameDocumentNavigation(navigationAction.request.url) {
+                decisionHandler(.allow)
+                return
             }
-            decisionHandler(.cancel)
+            if let url = navigationAction.request.url, Self.isExternalURL(url) {
+                openExternalURL(url)
+                decisionHandler(.cancel)
+                return
+            }
+            decisionHandler(.allow)
         }
 
         public func webView(
@@ -309,10 +346,31 @@ public struct HTMLAttachmentPreview: UIViewRepresentable {
             for navigationAction: WKNavigationAction,
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
-            if let url = navigationAction.request.url {
+            if let url = navigationAction.request.url, Self.isExternalURL(url) {
                 openExternalURL(url)
             }
             return nil
+        }
+
+        public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            #if DEBUG
+            debugProbe?(webView)
+            #endif
+        }
+
+        private static func isSameDocumentNavigation(_ url: URL?) -> Bool {
+            guard let url, url.fragment != nil else { return false }
+            if url.scheme == nil || url.scheme == "about" { return true }
+            if url.absoluteString.hasPrefix("about:blank#") { return true }
+            if url.scheme == "file" { return true }
+            return url.scheme == HTMLAttachmentPreview.previewBaseURL.scheme &&
+                url.host == HTMLAttachmentPreview.previewBaseURL.host &&
+                (url.path.isEmpty || url.path == "/")
+        }
+
+        private static func isExternalURL(_ url: URL) -> Bool {
+            guard let scheme = url.scheme?.lowercased() else { return false }
+            return ["http", "https", "mailto", "tel"].contains(scheme)
         }
     }
 }
