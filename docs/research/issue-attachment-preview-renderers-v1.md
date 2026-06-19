@@ -124,11 +124,12 @@ public func getAttachmentContent(id: String, workspaceId: String? = nil) async t
 - 文本 body 仍来自 `/api/attachments/{id}/content`。
 - 用 `WKWebView.loadHTMLString(content, baseURL: nil)`。
 - 使用非持久 `WKWebsiteDataStore.nonPersistent()`。
-- 禁用不必要的导航：`WKNavigationDelegate` 拦截外链，外部 URL 走确认后 `openURL`。
-- 默认允许附件 HTML 内 JS，与 Web 的 iframe `sandbox="allow-scripts"` 对齐；如果担心风险，可第一版禁 JS，并给“启用交互预览”开关。
-- 不给 cookie/localStorage 持久环境，避免附件 HTML 读 App 登录态。
+- **默认允许当前 HTML 文档内的 JavaScript / CSS 交互**，以支持 tabs、accordion、按钮切换、图表 hover/click、锚点滚动等“本页内交互”。这与 Web 的 iframe `sandbox="allow-scripts"` 保持一致。
+- **默认禁止越界能力**：不注入 App token，不共享持久 cookie/localStorage，不允许任意顶层跳转、新窗口、表单提交或访问父 App 能力。
+- `WKNavigationDelegate` 拦截外链和新窗口请求；外部 URL 只在用户确认后交给系统打开。
+- 增加一个本地 HTML fixture / UI 验证：包含 tab 切换，确保交互没有被误禁。
 
-iOS 没有 Web iframe sandbox 的完全等价物，但 `WKWebView` + non-persistent store + baseURL nil + navigation policy 可以做到足够接近。
+iOS 没有 Web iframe sandbox 的完全等价物，但 `WKWebView` + non-persistent store + baseURL nil + navigation policy 可以做到足够接近。第一版不禁用 JS，因为禁 JS 会破坏用户明确需要的 HTML tabs / 交互组件体验。
 
 ### 6. XML / text / code 渲染
 

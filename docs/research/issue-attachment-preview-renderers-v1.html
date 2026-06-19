@@ -33,7 +33,7 @@
         </div>
         <ul>
           <li>Markdown：通过 <code>/api/attachments/{id}/content</code> 拉正文，用 iOS 现有 <code>MarkdownText</code> 渲染。</li>
-          <li>HTML：通过同一文本代理拉正文，用 <code>WKWebView</code> 非持久数据环境渲染。</li>
+          <li>HTML：通过同一文本代理拉正文，用 <code>WKWebView</code> 非持久数据环境渲染，并保留本页内交互 JS。</li>
           <li>XML/JSON/源码/text：按文本源码显示，第一版先保证可读、可复制、可横向滚动。</li>
           <li>下载/分享/外部打开继续保留，避免 preview 不支持时卡住用户。</li>
         </ul>
@@ -85,10 +85,11 @@
       <article class="card">
         <h2>安全策略</h2>
         <ul>
+          <li>默认允许 HTML 本页内 JS/CSS 交互：tabs、accordion、按钮切换、图表 hover/click。</li>
           <li>HTML 不注入 App token，不共享持久 cookie/localStorage。</li>
           <li><code>WKWebsiteDataStore.nonPersistent()</code>，<code>baseURL: nil</code>。</li>
-          <li>拦截外链导航，确认后交给系统打开。</li>
-          <li>沿用后端 2 MB cap，iOS 可用 <code>sizeBytes</code> 提前提示。</li>
+          <li>拦截外链、新窗口和越界导航；外部 URL 确认后交给系统打开。</li>
+          <li>增加 tab fixture 验证，防止误禁 JS 导致交互退化。</li>
           <li>XML 默认源码查看，不按 HTML 执行。</li>
         </ul>
       </article>
