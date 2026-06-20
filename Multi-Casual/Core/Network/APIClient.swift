@@ -1164,11 +1164,13 @@ public final class APIClient: @unchecked Sendable {
         let type: String
         let parentId: String?
         let attachmentIds: [String]?
+        let suppressAgentIds: [String]?
 
         enum CodingKeys: String, CodingKey {
             case content, type
             case parentId = "parent_id"
             case attachmentIds = "attachment_ids"
+            case suppressAgentIds = "suppress_agent_ids"
         }
     }
 
@@ -1205,6 +1207,7 @@ public final class APIClient: @unchecked Sendable {
         content: String,
         parentId: String? = nil,
         attachmentIds: [String]? = nil,
+        suppressAgentIds: [String]? = nil,
         workspaceId: String? = nil
     ) async throws -> Comment {
         try await request("POST", path: "api/issues/\(issueId)/comments",
@@ -1213,7 +1216,8 @@ public final class APIClient: @unchecked Sendable {
                             content: content,
                             type: "comment",
                             parentId: parentId,
-                            attachmentIds: attachmentIds?.isEmpty == false ? attachmentIds : nil
+                            attachmentIds: attachmentIds?.isEmpty == false ? attachmentIds : nil,
+                            suppressAgentIds: suppressAgentIds?.isEmpty == false ? suppressAgentIds : nil
                           ))
     }
 

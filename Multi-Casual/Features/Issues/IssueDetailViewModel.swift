@@ -979,10 +979,12 @@ public final class IssueDetailViewModel {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = replyAttachments[parentId] ?? []
         guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
+        let routed = routedReplyContentAndSuppressions(content: trimmed, parentId: parentId)
         let didSubmit = await submitComment(
-            content: trimmed,
+            content: routed.content,
             parentId: parentId,
-            attachmentParentId: parentId
+            attachmentParentId: parentId,
+            suppressAgentIds: routed.suppressAgentIds
         )
         if didSubmit {
             replyAttachments[parentId] = []
@@ -1021,7 +1023,12 @@ public final class IssueDetailViewModel {
         }
     }
 
-    private func submitComment(content: String, parentId: String?, attachmentParentId: String? = nil) async -> Bool {
+    private func submitComment(
+        content: String,
+        parentId: String?,
+        attachmentParentId: String? = nil,
+        suppressAgentIds: [String]? = nil
+    ) async -> Bool {
         isSubmittingComment = true; defer { isSubmittingComment = false }
         do {
             let comment = try await api.addComment(
@@ -1029,6 +1036,7 @@ public final class IssueDetailViewModel {
                 content: content,
                 parentId: parentId,
                 attachmentIds: attachmentIds(forParentId: attachmentParentId ?? parentId),
+                suppressAgentIds: suppressAgentIds,
                 workspaceId: resolvedWorkspaceId
             )
             commentLoader.items.append(comment)
@@ -1068,6 +1076,35 @@ public final class IssueDetailViewModel {
         let commentsById = Dictionary(uniqueKeysWithValues: commentLoader.items.map { ($0.id, $0) })
         guard let comment = commentsById[commentId] else { return commentId }
         return rootCommentId(for: comment, commentsById: commentsById)
+    }
+
+    private func routedReplyContentAndSuppressions(content: String, parentId: String) -> (content: String, suppressAgentIds: [String]?) {
+        guard let parent = commentLoader.items.first(where: { $0.id == parentId }),
+              parent.authorType == "agent",
+              !content.contains("mention://")
+        else {
+            return (content, nil)
+        }
+        let targetAgentId = parent.authorId
+        let targetAgentName = subscriberAgents.first { $0.id == targetAgentId }?.name ?? "Agent \(targetAgentId.prefix(8))"
+        let routedContent = "\(content) \(Self.agentMentionMarkdown(agentId: targetAgentId, label: targetAgentName))"
+        let suppressions = defaultReplySuppressions(except: targetAgentId)
+        return (routedContent, suppressions.isEmpty ? nil : suppressions)
+    }
+
+    private func defaultReplySuppressions(except targetAgentId: String) -> [String] {
+        guard let issue else { return [] }
+        var ids = Set<String>()
+        if issue.assigneeType == "agent", let assigneeId = issue.assigneeId {
+            ids.insert(assigneeId)
+        }
+        if issue.assigneeType == "squad",
+           let squadId = issue.assigneeId,
+           let leaderId = subscriberSquads.first(where: { $0.id == squadId })?.leaderId {
+            ids.insert(leaderId)
+        }
+        ids.remove(targetAgentId)
+        return Array(ids)
     }
 
     private func descendantCommentIds(of commentId: String) -> Set<String> {

@@ -493,6 +493,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
     public let name: String
     public let description: String
     public let avatarUrl: String?
+    public let leaderId: String?
     public let agentIds: [String]
     public let memberIds: [String]
     public let createdAt: Date?
@@ -503,6 +504,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         case id, name, description
         case workspaceId = "workspace_id"
         case avatarUrl = "avatar_url"
+        case leaderId = "leader_id"
         case agentIds = "agent_ids"
         case memberIds = "member_ids"
         case createdAt = "created_at"
@@ -516,6 +518,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         name: String,
         description: String = "",
         avatarUrl: String? = nil,
+        leaderId: String? = nil,
         agentIds: [String] = [],
         memberIds: [String] = [],
         createdAt: Date? = nil,
@@ -527,6 +530,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         self.name = name
         self.description = description
         self.avatarUrl = avatarUrl
+        self.leaderId = leaderId
         self.agentIds = agentIds
         self.memberIds = memberIds
         self.createdAt = createdAt
@@ -541,6 +545,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? id
         description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        leaderId = try container.decodeIfPresent(String.self, forKey: .leaderId)
         agentIds = try container.decodeIfPresent([String].self, forKey: .agentIds) ?? []
         memberIds = try container.decodeIfPresent([String].self, forKey: .memberIds) ?? []
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
