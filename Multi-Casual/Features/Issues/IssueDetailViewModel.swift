@@ -980,9 +980,8 @@ public final class IssueDetailViewModel {
         let attachments = replyAttachments[parentId] ?? []
         guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
         let rootParentId = threadRootCommentId(for: parentId)
-        let outgoingContent = replyContentWithImplicitAgentMentions(trimmed, rootParentId: rootParentId)
         let didSubmit = await submitComment(
-            content: outgoingContent,
+            content: trimmed,
             parentId: rootParentId,
             attachmentParentId: parentId
         )
@@ -1070,54 +1069,6 @@ public final class IssueDetailViewModel {
         let commentsById = Dictionary(uniqueKeysWithValues: commentLoader.items.map { ($0.id, $0) })
         guard let comment = commentsById[commentId] else { return commentId }
         return rootCommentId(for: comment, commentsById: commentsById)
-    }
-
-    private func replyContentWithImplicitAgentMentions(_ content: String, rootParentId: String) -> String {
-        guard !content.contains("mention://agent/") else { return content }
-        let mentions = participatingAgentMentions(inThreadRootId: rootParentId)
-        guard !mentions.isEmpty else { return content }
-        let mentionMarkdown = mentions
-            .map { Self.agentMentionMarkdown(agentId: $0.id, label: $0.label) }
-            .joined(separator: " ")
-        return content.isEmpty ? mentionMarkdown : "\(content) \(mentionMarkdown)"
-    }
-
-    private func participatingAgentMentions(inThreadRootId rootId: String) -> [(id: String, label: String)] {
-        let commentsById = Dictionary(uniqueKeysWithValues: commentLoader.items.map { ($0.id, $0) })
-        let threadComments = commentLoader.items
-            .filter { rootCommentId(for: $0, commentsById: commentsById) == rootId }
-            .sorted(by: sortCommentsAscending)
-        let agentsById = Dictionary(uniqueKeysWithValues: subscriberAgents.map { ($0.id, $0.name) })
-        var seen = Set<String>()
-        var mentions: [(id: String, label: String)] = []
-
-        func appendAgent(id: String) {
-            guard !seen.contains(id) else { return }
-            seen.insert(id)
-            mentions.append((id: id, label: agentsById[id] ?? id))
-        }
-
-        for comment in threadComments {
-            if comment.authorType == "agent" {
-                appendAgent(id: comment.authorId)
-            }
-            for id in Self.agentMentionIds(in: comment.content) {
-                appendAgent(id: id)
-            }
-        }
-        return mentions
-    }
-
-    private static func agentMentionIds(in content: String) -> [String] {
-        let pattern = #"mention://agent/([^\s)]+)"#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
-        let range = NSRange(content.startIndex..<content.endIndex, in: content)
-        return regex.matches(in: content, range: range).compactMap { match in
-            guard match.numberOfRanges > 1,
-                  let idRange = Range(match.range(at: 1), in: content)
-            else { return nil }
-            return String(content[idRange])
-        }
     }
 
     private func descendantCommentIds(of commentId: String) -> Set<String> {
