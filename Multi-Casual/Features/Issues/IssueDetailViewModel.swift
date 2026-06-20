@@ -979,10 +979,9 @@ public final class IssueDetailViewModel {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         let attachments = replyAttachments[parentId] ?? []
         guard !trimmed.isEmpty || !attachments.isEmpty else { return false }
-        let rootParentId = threadRootCommentId(for: parentId)
         let didSubmit = await submitComment(
             content: trimmed,
-            parentId: rootParentId,
+            parentId: parentId,
             attachmentParentId: parentId
         )
         if didSubmit {
