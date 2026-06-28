@@ -37,6 +37,10 @@ public struct IssueDetailView: View {
     @State private var replyAttachmentError: String?
     @State private var showReplyAttachmentImporter = false
     @State private var selectedReplyImageItem: PhotosPickerItem?
+    /// Resolved threads the user has expanded. Resolved threads default to a
+    /// collapsed one-line bar; tapping expands them here. Unresolved threads
+    /// always render in full.
+    @State private var expandedResolvedThreads: Set<String> = []
     @FocusState private var composerFocus: IssueComposerFocus?
     @State private var autoRefreshTask: Task<Void, Never>?
     private let autoRefreshIntervalNanoseconds: UInt64 = 60_000_000_000
@@ -573,21 +577,40 @@ public struct IssueDetailView: View {
             }
             let markdownContext = vm.commentMarkdownContext(issuePrefix: authSession.currentWorkspace?.issuePrefix)
             ForEach(vm.displayedCommentThreads) { thread in
+                let isResolved = thread.isResolved
+                let isCollapsed = isResolved && !expandedResolvedThreads.contains(thread.id)
                 VStack(alignment: .leading, spacing: 4) {
-                    commentRow(
-                        thread.root,
-                        vm: vm,
-                        currentUserId: currentUserId,
-                        markdownContext: markdownContext
-                    )
-                    ForEach(thread.replies) { reply in
+                    if isResolved {
+                        ResolvedThreadBar(
+                            thread: thread,
+                            resolverName: vm.resolverDisplayName(for: thread.resolvedReply ?? thread.root),
+                            isCollapsed: isCollapsed,
+                            language: appLanguage
+                        ) {
+                            if expandedResolvedThreads.contains(thread.id) {
+                                expandedResolvedThreads.remove(thread.id)
+                            } else {
+                                expandedResolvedThreads.insert(thread.id)
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    if !isCollapsed {
                         commentRow(
-                            reply,
+                            thread.root,
                             vm: vm,
                             currentUserId: currentUserId,
                             markdownContext: markdownContext
                         )
-                        .padding(.leading, 28)
+                        ForEach(thread.replies) { reply in
+                            commentRow(
+                                reply,
+                                vm: vm,
+                                currentUserId: currentUserId,
+                                markdownContext: markdownContext
+                            )
+                            .padding(.leading, 28)
+                        }
                     }
                 }
             }
@@ -621,7 +644,15 @@ public struct IssueDetailView: View {
             onDelete: { commentId in
                 await vm.deleteComment(commentId: commentId)
             },
-            onPreviewAttachment: { selectedPreviewAttachment = $0 }
+            onPreviewAttachment: { selectedPreviewAttachment = $0 },
+            onResolve: { commentId, resolve in
+                if resolve {
+                    await vm.resolveComment(commentId: commentId)
+                } else {
+                    await vm.unresolveComment(commentId: commentId)
+                }
+            },
+            isResolving: vm.resolvingCommentIds.contains(comment.id)
         )
     }
 
@@ -1444,6 +1475,10 @@ public struct CommentRowView: View {
     let onEdit: (String, String) async -> Bool
     let onDelete: (String) async -> Bool
     let onPreviewAttachment: (Attachment) -> Void
+    /// Resolve / unresolve this comment as the thread's answer. `resolve` true =
+    /// mark resolved, false = unresolve. Available on any comment (root or reply).
+    let onResolve: (String, Bool) async -> Void
+    let isResolving: Bool
 
     @State private var isEditing = false
     @State private var editDraft = ""
@@ -1461,7 +1496,9 @@ public struct CommentRowView: View {
         onStartReply: @escaping (Comment) -> Void = { _ in },
         onEdit: @escaping (String, String) async -> Bool = { _, _ in false },
         onDelete: @escaping (String) async -> Bool = { _ in false },
-        onPreviewAttachment: @escaping (Attachment) -> Void = { _ in }
+        onPreviewAttachment: @escaping (Attachment) -> Void = { _ in },
+        onResolve: @escaping (String, Bool) async -> Void = { _, _ in },
+        isResolving: Bool = false
     ) {
         self.comment = comment
         self.authorDisplayName = authorDisplayName ?? (comment.authorType == "agent" ? "Agent" : "Member")
@@ -1472,6 +1509,8 @@ public struct CommentRowView: View {
         self.onEdit = onEdit
         self.onDelete = onDelete
         self.onPreviewAttachment = onPreviewAttachment
+        self.onResolve = onResolve
+        self.isResolving = isResolving
     }
 
     public var body: some View {
@@ -1484,6 +1523,18 @@ public struct CommentRowView: View {
                     size: 24
                 )
                 MarkdownText(authorDisplayName).font(.caption.bold())
+                if comment.isResolved {
+                    HStack(spacing: 3) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.caption2)
+                        MarkdownText(AppStrings.localized("Resolved", language: appLanguage)).font(.caption2.bold())
+                    }
+                    .foregroundStyle(.green)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.12), in: Capsule())
+                    .accessibilityIdentifier("CommentResolvedBadge-\(comment.id)")
+                }
                 Spacer()
                 MarkdownText(iso8601DateTimeFormatter.string(from: comment.createdAt)).font(.caption2).foregroundStyle(.secondary)
                 if currentUserId != nil {
@@ -1503,8 +1554,24 @@ public struct CommentRowView: View {
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("CommentInlineReplyButton")
                 }
-                if canEdit || canDelete {
+                if canEdit || canDelete || canResolve {
                     Menu {
+                        if canResolve {
+                            Button {
+                                Task { await onResolve(comment.id, !comment.isResolved) }
+                            } label: {
+                                Label(
+                                    AppStrings.localized(
+                                        comment.isResolved ? "Unresolve" : resolveMenuTitle,
+                                        language: appLanguage
+                                    ),
+                                    systemImage: comment.isResolved ? "minus.circle" : "checkmark.circle"
+                                )
+                            }
+                            .disabled(isResolving)
+                            .accessibilityIdentifier("CommentResolveButton-\(comment.id)")
+                        }
+
                         if canEdit {
                             Button {
                                 editDraft = comment.content
@@ -1523,9 +1590,13 @@ public struct CommentRowView: View {
                             }
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if isResolving {
+                            ProgressView().scaleEffect(0.7)
+                        } else {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .accessibilityLabel(AppStrings.localized("Comment Actions", language: appLanguage))
                 }
@@ -1588,6 +1659,16 @@ public struct CommentRowView: View {
         comment.authorId == currentUserId
     }
 
+    /// Any signed-in workspace member can resolve / unresolve a comment thread.
+    private var canResolve: Bool {
+        currentUserId != nil
+    }
+
+    /// Root comments show "Resolve Thread"; replies show "Resolve with this reply".
+    private var resolveMenuTitle: String {
+        comment.parentId == nil ? "Resolve Thread" : "Resolve with this reply"
+    }
+
     private func focusEdit() {
         Task { @MainActor in
             await Task.yield()
@@ -1608,8 +1689,46 @@ public struct CommentRowView: View {
 
 }
 
-private let quickReactionEmojis = ["👍", "👀", "🚀", "❤️", "🎉"]
+/// One-line bar shown at the top of a resolved comment thread. Defaults to
+/// collapsed (only this bar is visible); tapping toggles expansion so the
 
+/// user can read the full thread and the resolved answer.
+private struct ResolvedThreadBar: View {
+    let thread: IssueDetailViewModel.CommentThread
+    let resolverName: String
+    let isCollapsed: Bool
+    let language: AppLanguage
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                MarkdownText(AppStrings.localized("This thread is resolved", language: language))
+                    .font(.caption.bold())
+                MarkdownText("·")
+                MarkdownText(resolverName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 8))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("ResolvedThreadBar-\(thread.id)")
+        .accessibilityLabel(AppStrings.localized("This thread is resolved", language: language))
+        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+    }
+}
+
+private let quickReactionEmojis = ["👍", "👀", "🚀", "❤️", "🎉"]
 private struct MentionPicker: View {
     let candidates: [MentionCandidate]
     let onSelect: (MentionCandidate) -> Void

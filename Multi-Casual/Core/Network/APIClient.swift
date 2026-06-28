@@ -1238,6 +1238,22 @@ public final class APIClient: @unchecked Sendable {
         let _: EmptyResponse = try await request("DELETE", path: "api/comments/\(commentId)", queryItems: workspaceQuery(workspaceId))
     }
 
+    /// Mark a comment as the resolved answer of its thread. The server enforces a
+    /// single-resolution invariant per thread: resolving this comment clears any
+    /// other resolution in the same thread atomically. The target may be a root
+    /// comment or any reply ("resolve with this reply"). Returns the updated
+    /// comment with authoritative resolved_at / resolved_by_* fields.
+    public func resolveComment(commentId: String, workspaceId: String? = nil) async throws -> Comment {
+        try await request("POST", path: "api/comments/\(commentId)/resolve", queryItems: workspaceQuery(workspaceId))
+    }
+
+    /// Clear the resolve state on a comment (un-resolve the thread). The server
+    /// returns the updated comment; we decode it as `Comment` (not EmptyResponse)
+    /// so local state stays in sync with the authoritative server value.
+    public func unresolveComment(commentId: String, workspaceId: String? = nil) async throws -> Comment {
+        try await request("DELETE", path: "api/comments/\(commentId)/resolve", queryItems: workspaceQuery(workspaceId))
+    }
+
     public func updateIssue(
         id: String,
         workspaceId: String? = nil,

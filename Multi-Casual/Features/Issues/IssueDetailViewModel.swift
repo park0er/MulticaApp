@@ -53,6 +53,15 @@ public final class IssueDetailViewModel {
         public let replies: [Comment]
 
         public var id: String { root.id }
+
+        /// The single resolved answer of this thread, if any. The server enforces
+        /// at most one resolved comment per thread, so this returns the first
+        /// (and only) comment with a non-nil resolvedAt across root + replies.
+        public var resolvedReply: Comment? {
+            ([root] + replies).first { $0.isResolved }
+        }
+
+        public var isResolved: Bool { resolvedReply != nil }
     }
 
     public enum CommentSortOrder: String, CaseIterable, Identifiable {
@@ -90,6 +99,9 @@ public final class IssueDetailViewModel {
     public var commentAttachments: [Attachment] = []
     public var replyAttachments: [String: [Attachment]] = [:]
     public var isSubmittingComment = false
+    /// Comment ids with an in-flight resolve / unresolve call. Used to disable
+    /// the resolve button per-comment and prevent re-entrancy.
+    public var resolvingCommentIds: Set<String> = []
     public var isUploadingCommentAttachment = false
     public var uploadingReplyAttachmentIds: Set<String> = []
     public var isLoadingIssue = false
@@ -611,6 +623,25 @@ public final class IssueDetailViewModel {
         }
     }
 
+    /// Display name for the member/agent/squad that resolved a comment, looked
+    /// up from the loaded workspace members/agents/squads. Falls back to a
+    /// short-id label when the actor is not cached (e.g. optimistic state has
+    /// no id yet).
+    public func resolverDisplayName(for comment: Comment) -> String {
+        let actorType = comment.resolvedByType ?? "member"
+        let actorId = comment.resolvedByID ?? ""
+        switch actorType {
+        case "member":
+            return subscriberMembers.first { $0.userId == actorId || $0.id == actorId }?.name ?? "成员 \(actorId.prefix(8))"
+        case "agent":
+            return subscriberAgents.first { $0.id == actorId }?.name ?? "Agent \(actorId.prefix(8))"
+        case "squad":
+            return subscriberSquads.first { $0.id == actorId }?.name ?? "Squad \(actorId.prefix(8))"
+        default:
+            return "\(actorType.capitalized) \(actorId.prefix(8))"
+        }
+    }
+
     public func agentName(for agentId: String?) -> String? {
         guard let agentId, !agentId.isEmpty else { return nil }
         return subscriberAgents.first { $0.id == agentId }?.name ?? "Agent \(agentId.prefix(8))"
@@ -1058,6 +1089,88 @@ public final class IssueDetailViewModel {
             self.error = error.localizedDescription
             return false
         }
+    }
+
+    /// Mark a comment as the resolved answer of its thread ("resolve with this
+    /// reply"). Any comment (root or reply) may be resolved. Optimistically sets
+    /// this comment resolved and clears any other resolution in the same thread
+    /// (single-resolution invariant), then applies the server-authoritative
+    /// value. Reverts on failure.
+    public func resolveComment(commentId: String) async {
+        guard !resolvingCommentIds.contains(commentId) else { return }
+        guard let workspaceId = resolvedWorkspaceId else { return }
+        resolvingCommentIds.insert(commentId)
+        defer { resolvingCommentIds.remove(commentId) }
+        let rootMap = rootIdByCommentId()
+        guard let rootId = rootMap[commentId] else { return }
+        // Snapshot thread resolve state for revert.
+        let snapshot: [String: (Date?, String?, String?)] = commentLoader.items.reduce(into: [:]) { dict, c in
+            if rootMap[c.id] == rootId { dict[c.id] = (c.resolvedAt, c.resolvedByType, c.resolvedByID) }
+        }
+        let now = Date()
+        commentLoader.items = commentLoader.items.map { c in
+            guard rootMap[c.id] == rootId else { return c }
+            if c.id == commentId {
+                return c.replacingResolved(at: now, byType: "member", byID: nil)
+            }
+            return c.resolvedAt == nil ? c : c.replacingResolved(at: nil, byType: nil, byID: nil)
+        }
+        do {
+            let updated = try await api.resolveComment(commentId: commentId, workspaceId: workspaceId)
+            applyResolvedComment(updated)
+            await DataStore.shared.invalidateIssue(issueId)
+        } catch {
+            // Revert to snapshotted resolve state.
+            commentLoader.items = commentLoader.items.map { c in
+                guard let snap = snapshot[c.id] else { return c }
+                return c.replacingResolved(at: snap.0, byType: snap.1, byID: snap.2)
+            }
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Clear the resolve state on a comment (un-resolve the thread).
+    public func unresolveComment(commentId: String) async {
+        guard !resolvingCommentIds.contains(commentId) else { return }
+        guard let workspaceId = resolvedWorkspaceId else { return }
+        resolvingCommentIds.insert(commentId)
+        defer { resolvingCommentIds.remove(commentId) }
+        guard let prior = commentLoader.items.first(where: { $0.id == commentId }) else { return }
+        // Optimistic: clear resolve on this comment.
+        commentLoader.items = commentLoader.items.map { c in
+            c.id == commentId ? c.replacingResolved(at: nil, byType: nil, byID: nil) : c
+        }
+        do {
+            let updated = try await api.unresolveComment(commentId: commentId, workspaceId: workspaceId)
+            applyResolvedComment(updated)
+            await DataStore.shared.invalidateIssue(issueId)
+        } catch {
+            // Revert.
+            commentLoader.items = commentLoader.items.map { c in
+                c.id == commentId ? c.replacingResolved(at: prior.resolvedAt, byType: prior.resolvedByType, byID: prior.resolvedByID) : c
+            }
+            self.error = error.localizedDescription
+        }
+    }
+
+    /// Apply the server-authoritative resolved comment, enforcing the
+    /// single-resolution invariant: any other resolved comment in the same
+    /// thread is cleared so local state never shows two resolutions.
+    private func applyResolvedComment(_ updated: Comment) {
+        let rootMap = rootIdByCommentId()
+        let rootId = rootMap[updated.id] ?? updated.id
+        commentLoader.items = commentLoader.items.map { c in
+            if c.id == updated.id { return updated }
+            if c.resolvedAt != nil, rootMap[c.id] == rootId {
+                return c.replacingResolved(at: nil, byType: nil, byID: nil)
+            }
+            return c
+        }
+    }
+
+    private func rootIdByCommentId() -> [String: String] {
+        let commentsById = Dictionary(uniqueKeysWithValues: commentLoader.items.map { ($0.id, $0) })
+        return Dictionary(uniqueKeysWithValues: commentLoader.items.map { ($0.id, rootCommentId(for: $0, commentsById: commentsById)) })
     }
 
     private func submitComment(content: String, parentId: String?, attachmentParentId: String? = nil) async -> Bool {

@@ -230,6 +230,11 @@
 "Cache Write" = "缓存写入";
 "Comment Actions" = "评论操作";
 "Comments" = "评论";
+"Resolve Thread" = "解决此线程";
+"Resolve with this reply" = "以此回复解决";
+"Unresolve" = "取消解决";
+"Resolved" = "已解决";
+"This thread is resolved" = "此线程已解决";
 "Copy this token now. It will not be shown again." = "现在复制此令牌，它不会再次显示。";
 "Created" = "已创建";
 "Created Skill" = "已创建 Skill";
