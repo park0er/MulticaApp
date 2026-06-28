@@ -230,6 +230,7 @@
 "Cache Write" = "缓存写入";
 "Comment Actions" = "评论操作";
 "Comments" = "评论";
+"HTML Preview Debug" = "HTML 预览调试";
 "Resolve Thread" = "解决此线程";
 "Resolve with this reply" = "以此回复解决";
 "Unresolve" = "取消解决";

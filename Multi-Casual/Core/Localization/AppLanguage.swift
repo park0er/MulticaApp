@@ -108,6 +108,7 @@ public enum AppStrings {
         "Chat": "聊天",
         "Clear Selection": "清除选择",
         "Comments": "评论",
+        "HTML Preview Debug": "HTML 预览调试",
         "Comment Actions": "评论操作",
         "Resolve Thread": "解决此线程",
         "Resolve with this reply": "以此回复解决",
