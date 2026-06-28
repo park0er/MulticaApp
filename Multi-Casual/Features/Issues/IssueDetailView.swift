@@ -8,6 +8,7 @@ public struct IssueDetailView: View {
     @Environment(AuthSession.self) private var authSession
     @Environment(APIClient.self) private var api
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.appLanguage) private var appLanguage
     @State private var viewModel: IssueDetailViewModel?
     @State private var showEditIssue = false
@@ -37,6 +38,8 @@ public struct IssueDetailView: View {
     @State private var showReplyAttachmentImporter = false
     @State private var selectedReplyImageItem: PhotosPickerItem?
     @FocusState private var composerFocus: IssueComposerFocus?
+    @State private var autoRefreshTask: Task<Void, Never>?
+    private let autoRefreshIntervalNanoseconds: UInt64 = 60_000_000_000
 
     public init(issueId: String) { self.issueId = issueId }
 
@@ -66,6 +69,19 @@ public struct IssueDetailView: View {
                     await pinVM.load()
                     await viewModel?.loadInitialData()
                 }
+            }
+            startAutoRefresh()
+        }
+        .onDisappear {
+            stopAutoRefresh()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                Task { await viewModel?.silentRefresh() }
+                startAutoRefresh()
+            default:
+                stopAutoRefresh()
             }
         }
         .sheet(item: $selectedTranscript) { selection in
@@ -1147,6 +1163,26 @@ public struct IssueDetailView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+    }
+
+    private func startAutoRefresh() {
+        stopAutoRefresh()
+        autoRefreshTask = Task {
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(nanoseconds: autoRefreshIntervalNanoseconds)
+                } catch {
+                    break
+                }
+                if Task.isCancelled { break }
+                await viewModel?.silentRefresh()
+            }
+        }
+    }
+
+    private func stopAutoRefresh() {
+        autoRefreshTask?.cancel()
+        autoRefreshTask = nil
     }
 
     private func startReply(to comment: Comment, authorDisplayName: String) {

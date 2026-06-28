@@ -129,7 +129,7 @@ public struct IssueListView: View {
                     IssueCreateSheet { vm.showCreateSheet = false; Task { await vm.refresh() } }
                         .presentationDragIndicator(.visible)
                 }
-                .refreshable { await vm.refresh() }
+                .refreshable { await vm.pullToRefresh() }
                 .issueSearchable(
                     enabled: initialScope == .all,
                     text: $searchText,
@@ -233,7 +233,10 @@ public struct IssueListView: View {
 
     private func listView(vm: IssueListViewModel) -> some View {
         List {
-            if vm.loader.items.isEmpty && !vm.loader.hasMore && !vm.loader.isLoading && vm.lastError == nil {
+            // Empty state only when a first load has finished with no items — never
+            // during a background silent refresh, so the list never flashes empty.
+            if vm.loader.items.isEmpty && !vm.loader.hasMore && !vm.loader.isLoading
+                && !vm.isRefreshing && vm.lastError == nil {
                 ContentUnavailableView(
                     AppStrings.localized(vm.scope.emptyTitle, language: appLanguage),
                     systemImage: initialScope.isPersonal ? "person.crop.circle.badge.checkmark" : "checklist",

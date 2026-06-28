@@ -713,6 +713,43 @@ public final class IssueDetailViewModel {
         }
     }
 
+    /// Silently refresh the first page of comments in place — merges by id,
+    /// never clears existing comments, never shows a spinner. Used for
+    /// background auto-refresh so an in-flight refresh can't wipe the thread
+    /// the user is reading.
+    public func silentRefreshComments() async {
+        guard didLoadComments, !commentLoader.isRefreshing else { return }
+        let workspaceId = resolvedWorkspaceId
+        do {
+            try await commentLoader.silentRefreshFirstPage { [api, issueId, workspaceId] offset in
+                try await api.listComments(issueId: issueId, workspaceId: workspaceId, limit: 50, offset: offset)
+            }
+            commentsError = nil
+        } catch {
+            // Silent failure: keep existing comments. A subsequent refresh retries.
+        }
+    }
+
+    /// Silently refresh the issue body without toggling `isLoadingIssue` (which
+    /// would flash the detail spinner). Replaces `issue` in place on success.
+    public func silentRefreshIssue() async {
+        do {
+            issue = try await api.getIssue(id: issueId, workspaceId: resolvedWorkspaceId)
+        } catch {
+            // Silent: keep existing issue.
+        }
+    }
+
+    /// Background auto-refresh for the detail screen: refreshes the issue body
+    /// and comments silently (no spinners, no clearing). Latest-progress
+    /// sections keep their own explicit refresh; they are not touched here to
+    /// avoid flashing their inline spinners.
+    public func silentRefresh() async {
+        async let issue: Void = silentRefreshIssue()
+        async let comments: Void = silentRefreshComments()
+        _ = await (issue, comments)
+    }
+
     public func loadAgentRuns() async {
         isLoadingAgentRuns = true
         agentRunsError = nil

@@ -20,7 +20,11 @@ public struct InboxView: View {
         Group {
             if let vm = viewModel {
                 List {
-                    if vm.loader.items.isEmpty && !vm.loader.hasMore && !vm.loader.isLoading && vm.lastError == nil {
+                    // Empty state only when a first load has finished with no items —
+                    // never during a background silent refresh (which never clears
+                    // items anyway), so the list never flashes empty.
+                    if vm.loader.items.isEmpty && !vm.loader.hasMore && !vm.loader.isLoading
+                        && !vm.loader.isRefreshing && vm.lastError == nil {
                         ContentUnavailableView(
                             AppStrings.localized("No Inbox Items", language: appLanguage),
                             systemImage: "tray",
