@@ -1188,6 +1188,33 @@ public final class APIClient: @unchecked Sendable {
         enum CodingKeys: String, CodingKey { case labelId = "label_id" }
     }
 
+    private struct CreateSquadRequest: Encodable {
+        let name: String
+        let description: String?
+        let leaderId: String
+        let avatarUrl: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name, description
+            case leaderId = "leader_id"
+            case avatarUrl = "avatar_url"
+        }
+    }
+
+    private struct UpdateSquadRequest: Encodable {
+        let name: String?
+        let description: String?
+        let instructions: String?
+        let leaderId: String?
+        let avatarUrl: String?
+
+        enum CodingKeys: String, CodingKey {
+            case name, description, instructions
+            case leaderId = "leader_id"
+            case avatarUrl = "avatar_url"
+        }
+    }
+
     private struct IssueSubscriberMutationRequest: Encodable {
         let userId: String?
         let userType: String?
@@ -1661,6 +1688,57 @@ public final class APIClient: @unchecked Sendable {
         }
         let response: ListSquadsResponse = try await request("GET", path: "api/squads", queryItems: queryItems)
         return response.squads
+    }
+
+    public func getSquad(id: String, workspaceId: String? = nil) async throws -> Squad {
+        try await request("GET", path: "api/squads/\(id)", queryItems: workspaceQuery(workspaceId))
+    }
+
+    public func createSquad(
+        name: String,
+        description: String? = nil,
+        leaderId: String,
+        avatarUrl: String? = nil,
+        workspaceId: String? = nil
+    ) async throws -> Squad {
+        try await request(
+            "POST",
+            path: "api/squads",
+            queryItems: workspaceQuery(workspaceId),
+            body: CreateSquadRequest(
+                name: name,
+                description: description,
+                leaderId: leaderId,
+                avatarUrl: avatarUrl
+            )
+        )
+    }
+
+    public func updateSquad(
+        id: String,
+        name: String? = nil,
+        description: String? = nil,
+        instructions: String? = nil,
+        leaderId: String? = nil,
+        avatarUrl: String? = nil,
+        workspaceId: String? = nil
+    ) async throws -> Squad {
+        try await request(
+            "PUT",
+            path: "api/squads/\(id)",
+            queryItems: workspaceQuery(workspaceId),
+            body: UpdateSquadRequest(
+                name: name,
+                description: description,
+                instructions: instructions,
+                leaderId: leaderId,
+                avatarUrl: avatarUrl
+            )
+        )
+    }
+
+    public func deleteSquad(id: String, workspaceId: String? = nil) async throws {
+        let _: EmptyResponse = try await request("DELETE", path: "api/squads/\(id)", queryItems: workspaceQuery(workspaceId))
     }
 
     public func getAgent(id: String, workspaceId: String? = nil) async throws -> Agent {

@@ -492,6 +492,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
     public let workspaceId: String?
     public let name: String
     public let description: String
+    public let instructions: String
     public let avatarUrl: String?
     public let leaderId: String?
     public let agentIds: [String]
@@ -501,7 +502,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
     public let archivedAt: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description
+        case id, name, description, instructions
         case workspaceId = "workspace_id"
         case avatarUrl = "avatar_url"
         case leaderId = "leader_id"
@@ -517,6 +518,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         workspaceId: String? = nil,
         name: String,
         description: String = "",
+        instructions: String = "",
         avatarUrl: String? = nil,
         leaderId: String? = nil,
         agentIds: [String] = [],
@@ -529,6 +531,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         self.workspaceId = workspaceId
         self.name = name
         self.description = description
+        self.instructions = instructions
         self.avatarUrl = avatarUrl
         self.leaderId = leaderId
         self.agentIds = agentIds
@@ -544,6 +547,7 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
         workspaceId = try container.decodeIfPresent(String.self, forKey: .workspaceId)
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? id
         description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        instructions = try container.decodeIfPresent(String.self, forKey: .instructions) ?? ""
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
         leaderId = try container.decodeIfPresent(String.self, forKey: .leaderId)
         agentIds = try container.decodeIfPresent([String].self, forKey: .agentIds) ?? []

@@ -248,8 +248,26 @@ public struct IssueListView: View {
                     issueListRow(issue: issue, vm: vm)
                 }
             } else {
+                let pinnedIssues = vm.pinnedIssues
+                if !pinnedIssues.isEmpty {
+                    Section {
+                        ForEach(pinnedIssues) { issue in
+                            issueListRow(issue: issue, vm: vm)
+                        }
+                    } header: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "pin.fill")
+                            MarkdownText(AppStrings.localized("Pinned", language: appLanguage))
+                            MarkdownText("(\(pinnedIssues.count))")
+                                .foregroundStyle(.secondary)
+                            Spacer(minLength: 0)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .accessibilityIdentifier("IssuePinnedSectionHeader")
+                    }
+                }
                 ForEach(IssueStatus.listCases, id: \.self) { status in
-                    let issues = vm.issues(for: status)
+                    let issues = vm.unpinnedIssues(for: status)
                     if !issues.isEmpty {
                         Section {
                             if !collapsedStatusSections.contains(status) {
@@ -308,6 +326,18 @@ public struct IssueListView: View {
         } else {
             NavigationLink(destination: IssueDetailView(issueId: issue.id)) {
                 IssueRowView(issue: issue, childProgressText: vm.childProgressText(for: issue))
+            }
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                Button {
+                    Task { await vm.togglePin(issueId: issue.id) }
+                } label: {
+                    Label(
+                        AppStrings.localized(vm.isPinned(issue.id) ? "Unpin" : "Pin", language: appLanguage),
+                        systemImage: vm.isPinned(issue.id) ? "pin.slash" : "pin"
+                    )
+                }
+                .tint(.orange)
+                .accessibilityIdentifier("IssuePinToggle-\(issue.identifier)")
             }
             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                 if issue.status != .done {

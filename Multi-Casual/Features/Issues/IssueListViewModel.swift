@@ -104,6 +104,10 @@ public final class IssueListViewModel {
     public private(set) var sortDirection: SortDirection = .ascending
     public private(set) var issuesByStatus: [IssueStatus: [Issue]] = [:]
     public private(set) var childProgressByParentIssueId: [String: ChildIssueProgressEntry] = [:]
+    /// Issue ids the current user has pinned, ordered by pin position. Pinned
+    /// issues are surfaced in a dedicated "Pinned" section at the top of the
+    /// list so they're found first, independent of the active sorter.
+    public private(set) var pinnedIssueIds: [String] = []
 
     private let api: APIClient
     private let authSession: AuthSession
@@ -245,6 +249,7 @@ public final class IssueListViewModel {
             }
             try await loadChildProgress(workspaceId: wsId)
             syncFlatIssues()
+            await loadPins()
             lastError = nil
         } catch {
             // Silent failure: keep existing items. A subsequent refresh retries.
@@ -480,6 +485,77 @@ public final class IssueListViewModel {
         sorted(issuesByStatus[status] ?? [])
     }
 
+    /// Whether the given issue is currently pinned by the user.
+    public func isPinned(_ issueId: String) -> Bool {
+        pinnedIssueIds.contains(issueId)
+    }
+
+    /// Loaded issues that are pinned, ordered by pin position. Drawn from the
+    /// already-loaded buckets so a pinned issue still appears under its status
+    /// group's data; pinned issues not yet loaded are simply omitted.
+    public var pinnedIssues: [Issue] {
+        guard !pinnedIssueIds.isEmpty else { return [] }
+        let allLoaded = IssueStatus.listCases.flatMap { issuesByStatus[$0] ?? [] }
+        let byId = Dictionary(allLoaded.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return pinnedIssueIds.compactMap { byId[$0] }
+    }
+
+    /// Issues for a status with pinned issues removed, so each pinned issue
+    /// appears once — in the dedicated top "Pinned" section, not duplicated in
+    /// its status group. Used by the list view; the board view keeps the full
+    /// status columns via `issues(for:)`.
+    public func unpinnedIssues(for status: IssueStatus) -> [Issue] {
+        guard !pinnedIssueIds.isEmpty else { return issues(for: status) }
+        let pinned = Set(pinnedIssueIds)
+        return issues(for: status).filter { !pinned.contains($0.id) }
+    }
+
+    /// Pin or unpin an issue from the list. Optimistically updates local state
+    /// so the issue immediately moves into / out of the top "Pinned" section.
+    public func togglePin(issueId: String) async {
+        guard let workspace = authSession.currentWorkspace else {
+            lastError = UserVisibleError("Pick a workspace before pinning Issues.")
+            return
+        }
+        do {
+            if isPinned(issueId) {
+                try await api.deletePin(
+                    itemType: .issue,
+                    itemId: issueId,
+                    workspaceId: workspace.id,
+                    workspaceSlug: workspace.slug
+                )
+                pinnedIssueIds.removeAll { $0 == issueId }
+            } else {
+                _ = try await api.createPin(
+                    itemType: .issue,
+                    itemId: issueId,
+                    workspaceId: workspace.id,
+                    workspaceSlug: workspace.slug
+                )
+                if !pinnedIssueIds.contains(issueId) {
+                    pinnedIssueIds.append(issueId)
+                }
+            }
+            lastError = nil
+        } catch {
+            lastError = error
+        }
+    }
+
+    private func loadPins() async {
+        guard let workspace = authSession.currentWorkspace else { return }
+        do {
+            let pins = try await api.listPins(workspaceId: workspace.id, workspaceSlug: workspace.slug)
+            pinnedIssueIds = pins
+                .filter { $0.itemType == .issue }
+                .sorted { $0.position < $1.position }
+                .map { $0.itemId }
+        } catch {
+            // Pins are an enhancement; a failure must not break the issue list.
+        }
+    }
+
     public func childProgressText(for issue: Issue) -> String? {
         guard let progress = childProgressByParentIssueId[issue.id], progress.total > 0 else {
             return nil
@@ -511,6 +587,7 @@ public final class IssueListViewModel {
         try await loadChildProgress(workspaceId: workspaceId)
         hasLoadedFirstPages = true
         syncFlatIssues()
+        await loadPins()
     }
 
     private func serverFilter(workspaceId: String) async throws -> ServerFilter {
@@ -639,6 +716,7 @@ public final class IssueListViewModel {
         childProgressByParentIssueId = progress
         hasLoadedFirstPages = true
         syncFlatIssues()
+        await loadPins()
     }
 
     /// Merge a freshly-fetched first page for one status into the live bucket,

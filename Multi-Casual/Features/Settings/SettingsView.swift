@@ -56,6 +56,7 @@ public struct SettingsView: View {
                 NavigationLink(AppStrings.localized("API Tokens", language: appLanguage)) { PersonalAccessTokensView() }
                 NavigationLink(AppStrings.localized("Labels", language: appLanguage)) { LabelsView() }
                 NavigationLink(AppStrings.localized("Agents", language: appLanguage)) { AgentsView() }
+                NavigationLink(AppStrings.localized("Squads", language: appLanguage)) { SquadsView() }
                 NavigationLink(AppStrings.localized("Autopilots", language: appLanguage)) { AutopilotsView() }
                 NavigationLink(AppStrings.localized("Runtimes", language: appLanguage)) { RuntimesView() }
                 NavigationLink(AppStrings.localized("Skills", language: appLanguage)) { SkillsView() }

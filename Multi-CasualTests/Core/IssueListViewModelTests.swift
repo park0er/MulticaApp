@@ -60,6 +60,9 @@ final class IssueListViewModelTests: XCTestCase {
     func test_loadNext_fetchesFirstPageForEachIssueListStatus() async throws {
         var requestedStatuses: [String] = []
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -85,6 +88,9 @@ final class IssueListViewModelTests: XCTestCase {
     func test_loadNext_paginatesNextStatusBucketWithRemainingItems() async throws {
         var requested: [(status: String, offset: String?)] = []
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -116,6 +122,9 @@ final class IssueListViewModelTests: XCTestCase {
     func test_loadNext_appliesPriorityFilterToStatusBuckets() async throws {
         var requestedPriorities: [String?] = []
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -137,6 +146,9 @@ final class IssueListViewModelTests: XCTestCase {
         var requestedPaths: [String] = []
         let client = makeClient { req in
             requestedPaths.append(req.url?.path ?? "")
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(
                     for: req,
@@ -163,6 +175,9 @@ final class IssueListViewModelTests: XCTestCase {
     func test_myIssuesAssignedScopeFiltersByCurrentUserAssignee() async throws {
         var issueQueries: [[URLQueryItem]] = []
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -183,6 +198,9 @@ final class IssueListViewModelTests: XCTestCase {
     func test_myIssuesCreatedScopeFiltersByCurrentUserCreator() async throws {
         var issueQueries: [[URLQueryItem]] = []
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -217,6 +235,8 @@ final class IssueListViewModelTests: XCTestCase {
                     ]
                     """.utf8)
                 )
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             case "/api/issues":
@@ -254,6 +274,8 @@ final class IssueListViewModelTests: XCTestCase {
                  "has_more":false,"total":1}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             default:
@@ -297,6 +319,8 @@ final class IssueListViewModelTests: XCTestCase {
                 ],"has_more":false,"total":2}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             default:
@@ -333,6 +357,8 @@ final class IssueListViewModelTests: XCTestCase {
                 ],"has_more":false,"total":1}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             default:
@@ -365,6 +391,8 @@ final class IssueListViewModelTests: XCTestCase {
                 ],"has_more":false,"total":1}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 XCTFail("Search should not request child-progress.")
                 return Self.childProgressResponse(for: req, progress: [])
@@ -490,6 +518,8 @@ final class IssueListViewModelTests: XCTestCase {
                 ],"has_more":false,"total":1}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             default:
@@ -542,6 +572,8 @@ final class IssueListViewModelTests: XCTestCase {
                 ],"has_more":false,"total":1}
                 """.data(using: .utf8)!
                 return Self.response(for: req, body: json)
+            case "/api/pins":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case "/api/issues/child-progress":
                 return Self.childProgressResponse(for: req, progress: [])
             default:
@@ -572,6 +604,9 @@ final class IssueListViewModelTests: XCTestCase {
 
     func test_setSortOption_sortsLoadedIssuesByPriority() async throws {
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -597,6 +632,9 @@ final class IssueListViewModelTests: XCTestCase {
 
     func test_setSortDirectionReversesIssuesListSortDimension() async throws {
         let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
             if req.url?.path == "/api/issues/child-progress" {
                 return Self.childProgressResponse(for: req, progress: [])
             }
@@ -632,6 +670,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -670,6 +710,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -741,6 +783,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -787,6 +831,8 @@ final class IssueListViewModelTests: XCTestCase {
         var deleteRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -823,6 +869,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -855,6 +903,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -896,6 +946,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -936,6 +988,8 @@ final class IssueListViewModelTests: XCTestCase {
         var updateRequestBody: [String: Any] = [:]
         let client = makeClient { req in
             switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins"):
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
             case ("GET", "/api/issues/child-progress"):
                 return Self.childProgressResponse(for: req, progress: [])
             case ("GET", "/api/issues"):
@@ -966,6 +1020,91 @@ final class IssueListViewModelTests: XCTestCase {
         XCTAssertEqual(vm.issuesByStatus[.todo]?.map(\.id) ?? [], [])
         XCTAssertEqual(vm.issuesByStatus[.inProgress]?.map(\.id), ["todo-1", "in_progress-1"])
         XCTAssertNil(vm.lastError)
+    }
+
+    func test_pinnedIssuesSurfaceAtTopAndAreExcludedFromStatusGroups() async throws {
+        let client = makeClient { req in
+            if req.url?.path == "/api/pins" {
+                return Self.pinsResponse(for: req, pinned: [("done-1", 1), ("todo-1", 0)])
+            }
+            if req.url?.path == "/api/issues/child-progress" {
+                return Self.childProgressResponse(for: req, progress: [])
+            }
+            let components = URLComponents(url: req.url!, resolvingAgainstBaseURL: false)
+            guard let status = components?.queryItems?.first(where: { $0.name == "status" })?.value else {
+                XCTFail("Expected status query in \(req.url?.absoluteString ?? "")")
+                return Self.emptyIssuesResponse(for: req)
+            }
+            return Self.issuesResponse(for: req, status: status, total: 1)
+        }
+        let vm = IssueListViewModel(api: client, authSession: makeAuthSession())
+
+        await vm.loadNext()
+
+        // Pinned issues ordered by pin position (todo-1 position 0, done-1 position 1).
+        XCTAssertEqual(vm.pinnedIssues.map(\.id), ["todo-1", "done-1"])
+        XCTAssertTrue(vm.isPinned("todo-1"))
+        XCTAssertTrue(vm.isPinned("done-1"))
+        XCTAssertFalse(vm.isPinned("backlog-1"))
+        // Pinned issues are removed from their status groups to avoid duplication.
+        XCTAssertEqual(vm.unpinnedIssues(for: .todo).map(\.id), [])
+        XCTAssertEqual(vm.unpinnedIssues(for: .done).map(\.id), [])
+        // Non-pinned statuses keep their full contents.
+        XCTAssertEqual(vm.unpinnedIssues(for: .backlog).map(\.id), ["backlog-1"])
+    }
+
+    func test_togglePinAddsThenRemovesFromPinnedSet() async throws {
+        var requests: [String] = []
+        let client = makeClient { req in
+            requests.append("\(req.httpMethod ?? "") \(req.url?.path ?? "")")
+            switch (req.httpMethod, req.url?.path) {
+            case (_, "/api/pins") where req.httpMethod == "GET":
+                return Self.pinsResponse(for: req, pinned: [])
+            case ("POST", "/api/pins"):
+                return Self.response(
+                    for: req,
+                    body: #"{"id":"pin1","workspace_id":"w1","user_id":"u1","item_type":"issue","item_id":"todo-1","position":0,"created_at":"2026-01-01T00:00:00Z"}"#.data(using: .utf8)!
+                )
+            case ("DELETE", "/api/pins/issue/todo-1"):
+                return Self.response(for: req, body: Data(), status: 204)
+            case (_, "/api/issues/child-progress"):
+                return Self.childProgressResponse(for: req, progress: [])
+            default:
+                let components = URLComponents(url: req.url!, resolvingAgainstBaseURL: false)
+                guard let status = components?.queryItems?.first(where: { $0.name == "status" })?.value else {
+                    XCTFail("Unexpected request: \(req.url?.absoluteString ?? "")")
+                    return Self.emptyIssuesResponse(for: req)
+                }
+                return Self.issuesResponse(for: req, status: status, total: 1)
+            }
+        }
+        let vm = IssueListViewModel(api: client, authSession: makeAuthSession())
+
+        await vm.loadNext()
+        XCTAssertFalse(vm.isPinned("todo-1"))
+
+        await vm.togglePin(issueId: "todo-1")
+        XCTAssertTrue(vm.isPinned("todo-1"))
+        XCTAssertEqual(vm.pinnedIssues.map(\.id), ["todo-1"])
+
+        await vm.togglePin(issueId: "todo-1")
+        XCTAssertFalse(vm.isPinned("todo-1"))
+        XCTAssertTrue(vm.pinnedIssues.isEmpty)
+
+        XCTAssertTrue(requests.contains("POST /api/pins"))
+        XCTAssertTrue(requests.contains("DELETE /api/pins/issue/todo-1"))
+        XCTAssertNil(vm.lastError)
+    }
+
+    private static func pinsResponse(for request: URLRequest, pinned: [(String, Int)]) -> (HTTPURLResponse, Data) {
+        let entries = pinned.map { itemId, position in
+            #"{"id":"pin-\#(itemId)","workspace_id":"w1","user_id":"u1","item_type":"issue","item_id":"\#(itemId)","position":\#(position),"created_at":"2026-01-01T00:00:00Z"}"#
+        }
+        let json = "[\(entries.joined(separator: ","))]"
+        return (
+            HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!,
+            json.data(using: .utf8)!
+        )
     }
 
     private func makeClient(handler: ((URLRequest) throws -> (HTTPURLResponse, Data))? = nil) -> APIClient {
