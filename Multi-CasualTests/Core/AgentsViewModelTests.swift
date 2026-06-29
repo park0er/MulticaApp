@@ -347,6 +347,17 @@ final class AgentsViewModelTests: XCTestCase {
         XCTAssertEqual(summaries["a2"]?.displayText, "Offline • Queued 1/1")
     }
 
+    func test_avatarStatusDotMapsPresenceBuckets() {
+        func summary(_ availability: AgentAvailability, _ workload: AgentWorkload) -> AgentPresenceSummary {
+            AgentPresenceSummary(availability: availability, workload: workload, runningCount: 0, queuedCount: 0, capacity: 1)
+        }
+        XCTAssertEqual(summary(.offline, .idle).avatarStatusDot, .offline)
+        XCTAssertEqual(summary(.unstable, .working).avatarStatusDot, .unstable)
+        XCTAssertEqual(summary(.online, .working).avatarStatusDot, .working)
+        XCTAssertEqual(summary(.online, .queued).avatarStatusDot, .working)
+        XCTAssertEqual(summary(.online, .idle).avatarStatusDot, .online)
+    }
+
     func test_updateAgentSavesSkillAssignments() async throws {
         var requests: [String] = []
         var skillBody: [String: Any] = [:]

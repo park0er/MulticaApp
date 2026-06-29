@@ -194,7 +194,7 @@ private struct AgentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            AgentAvatarView(agent: agent, size: 30)
+            AgentAvatarView(agent: agent, size: 30, presence: presence)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     MarkdownText(agent.name).font(.body.weight(.semibold))
@@ -255,7 +255,7 @@ private struct AgentDetailView: View {
                     Section("Agent Detail") {
                         HStack {
                             Spacer()
-                            AgentAvatarView(agent: currentAgent, size: 72)
+                            AgentAvatarView(agent: currentAgent, size: 72, presence: listViewModel.presenceByAgentId[currentAgent.id])
                             Spacer()
                         }
                         MarkdownLabeledContent("Name", value: currentAgent.name)
@@ -436,9 +436,16 @@ private struct AgentDetailView: View {
 private struct AgentAvatarView: View {
     let agent: Agent
     let size: CGFloat
+    var presence: AgentPresenceSummary? = nil
 
     var body: some View {
-        AvatarView(name: agent.name, avatarUrl: agent.avatarUrl, kind: .agent, size: size)
+        AvatarView(
+            name: agent.name,
+            avatarUrl: agent.avatarUrl,
+            kind: .agent,
+            size: size,
+            statusDot: agent.archivedAt == nil ? presence?.avatarStatusDot : nil
+        )
     }
 }
 
