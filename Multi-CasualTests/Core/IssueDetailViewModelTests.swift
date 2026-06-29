@@ -1670,7 +1670,7 @@ final class IssueDetailViewModelTests: XCTestCase {
         XCTAssertEqual(vm.commentAuthorName(for: agentComment), "Codex")
     }
 
-    func test_commentThreadResolvedReplyReturnsSingleResolvedComment() {
+    func test_commentThreadResolutionKind_replyResolutionPinsTheResolvedReply() {
         let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: makeClient { req in
             XCTFail("No network expected")
             return Self.response(for: req, body: Data("{}".utf8), status: 500)
@@ -1684,7 +1684,31 @@ final class IssueDetailViewModelTests: XCTestCase {
         ]
 
         let thread = vm.displayedCommentThreads.first { $0.id == "c1" }
-        XCTAssertEqual(thread?.resolvedReply?.id, "r1", "resolvedReply is the one resolved comment in the thread")
+        // A REPLY is resolved -> kind is .reply and resolvedComment is that reply.
+        guard case .reply(let resolved)? = thread?.resolutionKind else {
+            XCTFail("Expected .reply resolution"); return
+        }
+        XCTAssertEqual(resolved.id, "r1")
+        XCTAssertEqual(thread?.resolvedComment?.id, "r1")
+        XCTAssertTrue(thread?.isResolved ?? false)
+    }
+
+    func test_commentThreadResolutionKind_rootResolutionFoldsTheWholeThread() {
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: makeClient { req in
+            XCTFail("No network expected")
+            return Self.response(for: req, body: Data("{}".utf8), status: 500)
+        })
+        let date = Date(timeIntervalSince1970: 10)
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u1"),
+            Comment(id: "r1", content: "Answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+        ]
+
+        let thread = vm.displayedCommentThreads.first { $0.id == "c1" }
+        // The ROOT is resolved -> kind is .root (whole-thread fold).
+        if case .root? = thread?.resolutionKind {} else { XCTFail("Expected .root resolution") }
+        XCTAssertEqual(thread?.resolvedComment?.id, "c1")
         XCTAssertTrue(thread?.isResolved ?? false)
     }
 

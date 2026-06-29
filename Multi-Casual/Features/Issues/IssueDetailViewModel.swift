@@ -54,14 +54,38 @@ public final class IssueDetailViewModel {
 
         public var id: String { root.id }
 
-        /// The single resolved answer of this thread, if any. The server enforces
-        /// at most one resolved comment per thread, so this returns the first
-        /// (and only) comment with a non-nil resolvedAt across root + replies.
-        public var resolvedReply: Comment? {
-            ([root] + replies).first { $0.isResolved }
+        /// How this thread is resolved, mirroring web's deriveThreadResolution.
+        /// "Resolve thread" sets resolved_at on the ROOT -> whole thread folds.
+        /// "Resolve thread with comment" sets resolved_at on a REPLY -> that reply
+        /// is the resolution; root + resolution stay visible and the other replies
+        /// fold behind a middle bar between them.
+        public var resolutionKind: ResolutionKind {
+            if root.isResolved { return .root }
+            let resolved = replies.filter { $0.isResolved }
+                .max { ($0.resolvedAt ?? .distantPast) < ($1.resolvedAt ?? .distantPast) }
+            return resolved.map { .reply($0) } ?? .none
         }
 
-        public var isResolved: Bool { resolvedReply != nil }
+        public var isResolved: Bool {
+            if case .none = resolutionKind { return false }
+            return true
+        }
+
+        /// The resolved comment (root or reply) for display.
+        public var resolvedComment: Comment? {
+            switch resolutionKind {
+            case .root: return root
+            case .reply(let c): return c
+            case .none: return nil
+            }
+        }
+    }
+
+    /// How a comment thread is resolved. Mirrors web's ThreadResolution.
+    public enum ResolutionKind: Sendable {
+        case none
+        case root
+        case reply(Comment)
     }
 
     public enum CommentSortOrder: String, CaseIterable, Identifiable {

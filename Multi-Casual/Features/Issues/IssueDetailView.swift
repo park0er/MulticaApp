@@ -577,42 +577,7 @@ public struct IssueDetailView: View {
             }
             let markdownContext = vm.commentMarkdownContext(issuePrefix: authSession.currentWorkspace?.issuePrefix)
             ForEach(vm.displayedCommentThreads) { thread in
-                let isResolved = thread.isResolved
-                let isCollapsed = isResolved && !expandedResolvedThreads.contains(thread.id)
-                VStack(alignment: .leading, spacing: 4) {
-                    if isResolved {
-                        ResolvedThreadBar(
-                            thread: thread,
-                            resolverName: vm.resolverDisplayName(for: thread.resolvedReply ?? thread.root),
-                            isCollapsed: isCollapsed,
-                            language: appLanguage
-                        ) {
-                            if expandedResolvedThreads.contains(thread.id) {
-                                expandedResolvedThreads.remove(thread.id)
-                            } else {
-                                expandedResolvedThreads.insert(thread.id)
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-                    if !isCollapsed {
-                        commentRow(
-                            thread.root,
-                            vm: vm,
-                            currentUserId: currentUserId,
-                            markdownContext: markdownContext
-                        )
-                        ForEach(thread.replies) { reply in
-                            commentRow(
-                                reply,
-                                vm: vm,
-                                currentUserId: currentUserId,
-                                markdownContext: markdownContext
-                            )
-                            .padding(.leading, 28)
-                        }
-                    }
-                }
+                resolvedThreadView(thread: thread, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
             }
             if vm.didLoadComments && vm.commentLoader.hasMore {
                 ProgressView().onAppear {
@@ -627,7 +592,8 @@ public struct IssueDetailView: View {
         _ comment: Comment,
         vm: IssueDetailViewModel,
         currentUserId: String?,
-        markdownContext: MarkdownRenderContext
+        markdownContext: MarkdownRenderContext,
+        isResolution: Bool = false
     ) -> some View {
         CommentRowView(
             comment: comment,
@@ -652,8 +618,71 @@ public struct IssueDetailView: View {
                     await vm.unresolveComment(commentId: commentId)
                 }
             },
-            isResolving: vm.resolvingCommentIds.contains(comment.id)
+            isResolving: vm.resolvingCommentIds.contains(comment.id),
+            isResolution: isResolution
         )
+    }
+
+    /// Renders a comment thread with the web's two-case resolution display:
+    ///   - root resolved ("Resolve thread"): the WHOLE thread folds into one
+    ///     ResolvedThreadBar; expand shows root + every reply.
+    ///   - reply resolved ("Resolve thread with comment"): root stays visible,
+    ///     the resolution reply is pinned at the bottom with a Resolution badge,
+    ///     and the OTHER replies fold behind a CommentsFoldBar between them.
+    ///   - none: root + all replies (normal).
+    @ViewBuilder
+    private func resolvedThreadView(thread: IssueDetailViewModel.CommentThread, vm: IssueDetailViewModel, currentUserId: String?, markdownContext: MarkdownRenderContext) -> some View {
+        let isExpanded = expandedResolvedThreads.contains(thread.id)
+        switch thread.resolutionKind {
+        case .none:
+            VStack(alignment: .leading, spacing: 4) {
+                commentRow(thread.root, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                ForEach(thread.replies) { reply in
+                    commentRow(reply, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                        .padding(.leading, 28)
+                }
+            }
+        case .root:
+            VStack(alignment: .leading, spacing: 4) {
+                if !isExpanded {
+                    ResolvedThreadBar(
+                        count: 1 + thread.replies.count,
+                        resolverName: vm.resolverDisplayName(for: thread.root),
+                        language: appLanguage
+                    ) {
+                        expandedResolvedThreads.insert(thread.id)
+                    }
+                    .padding(.horizontal)
+                } else {
+                    commentRow(thread.root, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                    ForEach(thread.replies) { reply in
+                        commentRow(reply, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                            .padding(.leading, 28)
+                    }
+                }
+            }
+        case .reply(let resolution):
+            let otherReplies = thread.replies.filter { $0.id != resolution.id }
+            VStack(alignment: .leading, spacing: 4) {
+                commentRow(thread.root, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                if !isExpanded && !otherReplies.isEmpty {
+                    CommentsFoldBar(
+                        count: otherReplies.count,
+                        language: appLanguage
+                    ) {
+                        expandedResolvedThreads.insert(thread.id)
+                    }
+                    .padding(.leading, 28)
+                } else {
+                    ForEach(otherReplies) { reply in
+                        commentRow(reply, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
+                            .padding(.leading, 28)
+                    }
+                }
+                commentRow(resolution, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext, isResolution: true)
+                    .padding(.leading, 28)
+            }
+        }
     }
 
     private func latestProgressSection(vm: IssueDetailViewModel) -> some View {
@@ -1479,6 +1508,10 @@ public struct CommentRowView: View {
     /// mark resolved, false = unresolve. Available on any comment (root or reply).
     let onResolve: (String, Bool) async -> Void
     let isResolving: Bool
+    /// True when this comment is the thread's pinned resolution ("Resolve
+    /// thread with comment"). Renders a stronger green "Resolution" badge so the
+    /// conclusion stays visually distinct from the folded middle replies.
+    let isResolution: Bool
 
     @State private var isEditing = false
     @State private var editDraft = ""
@@ -1498,7 +1531,8 @@ public struct CommentRowView: View {
         onDelete: @escaping (String) async -> Bool = { _ in false },
         onPreviewAttachment: @escaping (Attachment) -> Void = { _ in },
         onResolve: @escaping (String, Bool) async -> Void = { _, _ in },
-        isResolving: Bool = false
+        isResolving: Bool = false,
+        isResolution: Bool = false
     ) {
         self.comment = comment
         self.authorDisplayName = authorDisplayName ?? (comment.authorType == "agent" ? "Agent" : "Member")
@@ -1511,6 +1545,7 @@ public struct CommentRowView: View {
         self.onPreviewAttachment = onPreviewAttachment
         self.onResolve = onResolve
         self.isResolving = isResolving
+        self.isResolution = isResolution
     }
 
     public var body: some View {
@@ -1527,7 +1562,7 @@ public struct CommentRowView: View {
                     HStack(spacing: 3) {
                         Image(systemName: "checkmark.circle.fill")
                             .font(.caption2)
-                        MarkdownText(AppStrings.localized("Resolved", language: appLanguage)).font(.caption2.bold())
+                        MarkdownText(AppStrings.localized(isResolution ? "Resolution" : "Resolved", language: appLanguage)).font(.caption2.bold())
                     }
                     .foregroundStyle(.green)
                     .padding(.horizontal, 6)
@@ -1664,9 +1699,11 @@ public struct CommentRowView: View {
         currentUserId != nil
     }
 
-    /// Root comments show "Resolve Thread"; replies show "Resolve with this reply".
+    /// Root comments show "Resolve Thread" (whole-thread fold); replies show
+    /// "Resolve Thread with Comment" (root + resolution visible, middle folds).
+    /// Matches web's `resolve_thread_action` / `resolve_with_comment_action`.
     private var resolveMenuTitle: String {
-        comment.parentId == nil ? "Resolve Thread" : "Resolve with this reply"
+        comment.parentId == nil ? "Resolve Thread" : "Resolve Thread with Comment"
     }
 
     private func focusEdit() {
@@ -1690,29 +1727,28 @@ public struct CommentRowView: View {
 }
 
 /// One-line bar shown at the top of a resolved comment thread. Defaults to
-/// collapsed (only this bar is visible); tapping toggles expansion so the
-
-/// user can read the full thread and the resolved answer.
+/// Whole-thread fold — the ROOT comment is resolved ("Resolve thread"). The
+/// entire thread (root + every reply) collapses into this one bar; tapping
+/// expands to show the full thread. Mirrors web's `ResolvedThreadBar`.
 private struct ResolvedThreadBar: View {
-    let thread: IssueDetailViewModel.CommentThread
+    let count: Int
     let resolverName: String
-    let isCollapsed: Bool
     let language: AppLanguage
-    let onToggle: () -> Void
+    let onExpand: () -> Void
 
     var body: some View {
-        Button(action: onToggle) {
+        Button(action: onExpand) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                MarkdownText(AppStrings.localized("This thread is resolved", language: language))
+                MarkdownText(AppStrings.localized("N resolved comments", language: language, count: count))
                     .font(.caption.bold())
                 MarkdownText("·")
                 MarkdownText(resolverName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+                Image(systemName: "chevron.down")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -1722,9 +1758,40 @@ private struct ResolvedThreadBar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("ResolvedThreadBar-\(thread.id)")
+        .accessibilityIdentifier("ResolvedThreadBar")
         .accessibilityLabel(AppStrings.localized("This thread is resolved", language: language))
-        .accessibilityValue(isCollapsed ? "Collapsed" : "Expanded")
+        .accessibilityValue("Collapsed")
+    }
+}
+
+/// Middle fold — a REPLY is the resolution ("Resolve thread with comment").
+/// The root and the resolution reply stay visible; the OTHER replies fold
+/// behind this bar, which sits between them. Mirrors web's `CommentsFoldBar`.
+private struct CommentsFoldBar: View {
+    let count: Int
+    let language: AppLanguage
+    let onExpand: () -> Void
+
+    var body: some View {
+        Button(action: onExpand) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.down")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                MarkdownText(AppStrings.localized("N comments folded", language: language, count: count))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("CommentsFoldBar")
+        .accessibilityLabel(AppStrings.localized("N comments folded", language: language, count: count))
+        .accessibilityValue("Collapsed")
     }
 }
 
