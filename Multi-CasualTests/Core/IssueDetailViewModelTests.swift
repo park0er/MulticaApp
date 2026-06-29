@@ -748,7 +748,7 @@ final class IssueDetailViewModelTests: XCTestCase {
         XCTAssertNil(vm.error)
     }
 
-    func test_submitReplyInsideThreadUsesRootParentAndImplicitlyMentionsParticipatingAgent() async throws {
+    func test_submitReplyPreservesDirectParentAndImplicitlyMentionsParticipatingAgent() async throws {
         var submittedParentId: String?
         var submittedContent: String?
         let client = makeClient { req in
@@ -782,7 +782,8 @@ final class IssueDetailViewModelTests: XCTestCase {
         let didSubmit = await vm.submitReply(parentId: "r1", content: " \nContinue please ")
 
         XCTAssertTrue(didSubmit)
-        XCTAssertEqual(submittedParentId, "c1")
+        // The direct parent is preserved (no longer rewritten to the thread root).
+        XCTAssertEqual(submittedParentId, "r1")
         XCTAssertEqual(submittedContent, "Continue please [@Codex](mention://agent/a1)")
     }
 
