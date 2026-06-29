@@ -1773,6 +1773,42 @@ public final class APIClient: @unchecked Sendable {
         )
     }
 
+    public func listSquadMembers(squadId: String, workspaceId: String? = nil) async throws -> [SquadMember] {
+        try await request("GET", path: "api/squads/\(squadId)/members", queryItems: workspaceQuery(workspaceId))
+    }
+
+    public func removeSquadMember(
+        squadId: String,
+        memberType: String,
+        memberId: String,
+        workspaceId: String? = nil
+    ) async throws {
+        let _: EmptyResponse = try await request(
+            "DELETE",
+            path: "api/squads/\(squadId)/members",
+            queryItems: workspaceQuery(workspaceId),
+            body: SquadMemberMutationRequest(memberType: memberType, memberId: memberId, role: nil)
+        )
+    }
+
+    /// Updates a member's per-squad role/description. The web surfaces this
+    /// `role` string as a free-text description line on the squad detail page.
+    @discardableResult
+    public func updateSquadMemberRole(
+        squadId: String,
+        memberType: String,
+        memberId: String,
+        role: String,
+        workspaceId: String? = nil
+    ) async throws -> SquadMember {
+        try await request(
+            "PATCH",
+            path: "api/squads/\(squadId)/members/role",
+            queryItems: workspaceQuery(workspaceId),
+            body: SquadMemberMutationRequest(memberType: memberType, memberId: memberId, role: role)
+        )
+    }
+
     public func getAgent(id: String, workspaceId: String? = nil) async throws -> Agent {
         try await request("GET", path: "api/agents/\(id)", queryItems: workspaceQuery(workspaceId))
     }

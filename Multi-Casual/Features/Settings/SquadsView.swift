@@ -8,7 +8,6 @@ public struct SquadsView: View {
     @Environment(\.appLanguage) private var appLanguage
     @State private var viewModel: SquadsViewModel?
     @State private var showCreateSheet = false
-    @State private var editingSquad: Squad?
 
     public init() {}
 
@@ -26,12 +25,13 @@ public struct SquadsView: View {
                         )
                     } else {
                         ForEach(vm.squads) { squad in
-                            Button {
-                                editingSquad = squad
+                            NavigationLink {
+                                SquadDetailView(squad: squad) {
+                                    Task { await vm.load() }
+                                }
                             } label: {
                                 SquadRow(squad: squad, leaderName: vm.leaderName(for: squad))
                             }
-                            .buttonStyle(.plain)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     Task { await vm.deleteSquad(id: squad.id) }
@@ -65,10 +65,6 @@ public struct SquadsView: View {
                 }
                 .sheet(isPresented: $showCreateSheet) {
                     SquadFormSheet(squad: nil, viewModel: vm)
-                        .presentationDragIndicator(.visible)
-                }
-                .sheet(item: $editingSquad) { squad in
-                    SquadFormSheet(squad: squad, viewModel: vm)
                         .presentationDragIndicator(.visible)
                 }
             } else {

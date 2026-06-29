@@ -2085,6 +2085,66 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(member.memberType, "member")
     }
 
+    func test_listSquadMembers_decodesRoleField() async throws {
+        var capturedRequest: URLRequest?
+        let json = #"[{"id":"sm1","squad_id":"s1","member_type":"agent","member_id":"a1","role":"leader, can also review","created_at":"2026-01-01T00:00:00Z"}]"#.data(using: .utf8)!
+        MockURLProtocol.handler = { req in
+            capturedRequest = req
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, json)
+        }
+
+        let members = try await client.listSquadMembers(squadId: "s1", workspaceId: "w1")
+
+        XCTAssertEqual(capturedRequest?.httpMethod, "GET")
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/squads/s1/members")
+        XCTAssertEqual(members.first?.memberId, "a1")
+        XCTAssertEqual(members.first?.role, "leader, can also review")
+    }
+
+    func test_removeSquadMember_sendsDeleteWithBody() async throws {
+        var capturedRequest: URLRequest?
+        var capturedBody: [String: Any]?
+        MockURLProtocol.handler = { req in
+            capturedRequest = req
+            capturedBody = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
+            return (HTTPURLResponse(url: req.url!, statusCode: 204, httpVersion: nil, headerFields: nil)!, Data())
+        }
+
+        try await client.removeSquadMember(squadId: "s1", memberType: "agent", memberId: "a1", workspaceId: "w1")
+
+        XCTAssertEqual(capturedRequest?.httpMethod, "DELETE")
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/squads/s1/members")
+        XCTAssertEqual(capturedBody?["member_type"] as? String, "agent")
+        XCTAssertEqual(capturedBody?["member_id"] as? String, "a1")
+        XCTAssertNil(capturedBody?["role"])
+    }
+
+    func test_updateSquadMemberRole_patchesRoleText() async throws {
+        var capturedRequest: URLRequest?
+        var capturedBody: [String: Any]?
+        let json = #"{"id":"sm1","squad_id":"s1","member_type":"agent","member_id":"a1","role":"能力很一般，可以凑数打杂","created_at":"2026-01-01T00:00:00Z"}"#.data(using: .utf8)!
+        MockURLProtocol.handler = { req in
+            capturedRequest = req
+            capturedBody = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, json)
+        }
+
+        let member = try await client.updateSquadMemberRole(
+            squadId: "s1",
+            memberType: "agent",
+            memberId: "a1",
+            role: "能力很一般，可以凑数打杂",
+            workspaceId: "w1"
+        )
+
+        XCTAssertEqual(capturedRequest?.httpMethod, "PATCH")
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/squads/s1/members/role")
+        XCTAssertEqual(capturedBody?["member_type"] as? String, "agent")
+        XCTAssertEqual(capturedBody?["member_id"] as? String, "a1")
+        XCTAssertEqual(capturedBody?["role"] as? String, "能力很一般，可以凑数打杂")
+        XCTAssertEqual(member.role, "能力很一般，可以凑数打杂")
+    }
+
     func test_getAgentUsesDesktopEndpointAndWorkspaceScope() async throws {
         var capturedRequest: URLRequest?
         MockURLProtocol.handler = { req in
