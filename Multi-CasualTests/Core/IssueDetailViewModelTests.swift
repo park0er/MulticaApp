@@ -1670,6 +1670,177 @@ final class IssueDetailViewModelTests: XCTestCase {
         XCTAssertEqual(vm.commentAuthorName(for: agentComment), "Codex")
     }
 
+    func test_commentThreadResolutionKind_replyResolutionPinsTheResolvedReply() {
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: makeClient { req in
+            XCTFail("No network expected")
+            return Self.response(for: req, body: Data("{}".utf8), status: 500)
+        })
+        let date = Date(timeIntervalSince1970: 10)
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date),
+            Comment(id: "r1", content: "Answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u2"),
+            Comment(id: "r2", content: "Other reply", authorId: "u3", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+        ]
+
+        let thread = vm.displayedCommentThreads.first { $0.id == "c1" }
+        // A REPLY is resolved -> kind is .reply and resolvedComment is that reply.
+        guard case .reply(let resolved)? = thread?.resolutionKind else {
+            XCTFail("Expected .reply resolution"); return
+        }
+        XCTAssertEqual(resolved.id, "r1")
+        XCTAssertEqual(thread?.resolvedComment?.id, "r1")
+        XCTAssertTrue(thread?.isResolved ?? false)
+    }
+
+    func test_commentThreadResolutionKind_rootResolutionFoldsTheWholeThread() {
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: makeClient { req in
+            XCTFail("No network expected")
+            return Self.response(for: req, body: Data("{}".utf8), status: 500)
+        })
+        let date = Date(timeIntervalSince1970: 10)
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u1"),
+            Comment(id: "r1", content: "Answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+        ]
+
+        let thread = vm.displayedCommentThreads.first { $0.id == "c1" }
+        // The ROOT is resolved -> kind is .root (whole-thread fold).
+        if case .root? = thread?.resolutionKind {} else { XCTFail("Expected .root resolution") }
+        XCTAssertEqual(thread?.resolvedComment?.id, "c1")
+        XCTAssertTrue(thread?.isResolved ?? false)
+    }
+
+    func test_resolveComment_marksReplyResolvedAndClearsSiblingResolution() async throws {
+        let client = makeClient { req in
+            switch (req.httpMethod, req.url?.path) {
+            case ("POST", "/api/comments/r2/resolve"):
+                let json = """
+                {"id":"r2","content":"Answer","author_id":"u3","author_type":"member",
+                 "parent_id":"c1","issue_id":"i1","created_at":"2026-01-01T00:00:00Z",
+                 "resolved_at":"2026-02-02T00:00:00Z","resolved_by_type":"member","resolved_by_id":"u3"}
+                """.data(using: .utf8)!
+                return Self.response(for: req, body: json)
+            default:
+                XCTFail("Unexpected request: \(req.httpMethod ?? "") \(req.url?.absoluteString ?? "")")
+                return Self.response(for: req, body: Data("{}".utf8), status: 404)
+            }
+        }
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: client)
+        let date = ISO8601DateFormatter().date(from: "2026-01-01T00:00:00Z")!
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date),
+            Comment(id: "r1", content: "Old answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u2"),
+            Comment(id: "r2", content: "Answer", authorId: "u3", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+        ]
+
+        await vm.resolveComment(commentId: "r2")
+
+        let r1 = vm.commentLoader.items.first { $0.id == "r1" }
+        let r2 = vm.commentLoader.items.first { $0.id == "r2" }
+        XCTAssertNotNil(r2?.resolvedAt, "r2 should be resolved")
+        XCTAssertEqual(r2?.resolvedByID, "u3")
+        XCTAssertNil(r1?.resolvedAt, "single-resolution: r1's old resolution should be cleared")
+        XCTAssertNil(vm.error)
+        XCTAssertTrue(vm.resolvingCommentIds.isEmpty, "resolve id should clear after completion")
+    }
+
+    func test_resolveComment_revertsOnFailureKeepingPriorResolution() async throws {
+        let client = makeClient { req in
+            switch (req.httpMethod, req.url?.path) {
+            case ("POST", "/api/comments/r2/resolve"):
+                return Self.response(for: req, body: Data("{}".utf8), status: 500)
+            default:
+                XCTFail("Unexpected request: \(req.httpMethod ?? "") \(req.url?.absoluteString ?? "")")
+                return Self.response(for: req, body: Data("{}".utf8), status: 404)
+            }
+        }
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: client)
+        let date = ISO8601DateFormatter().date(from: "2026-01-01T00:00:00Z")!
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date),
+            Comment(id: "r1", content: "Old answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u2"),
+            Comment(id: "r2", content: "Answer", authorId: "u3", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+        ]
+
+        await vm.resolveComment(commentId: "r2")
+
+        let r1 = vm.commentLoader.items.first { $0.id == "r1" }
+        let r2 = vm.commentLoader.items.first { $0.id == "r2" }
+        XCTAssertNil(r2?.resolvedAt, "optimistic resolve on r2 should revert on failure")
+        XCTAssertNotNil(r1?.resolvedAt, "r1's prior resolution should be restored")
+        XCTAssertNotNil(vm.error, "failure should surface an error")
+    }
+
+    func test_unresolveComment_clearsResolveState() async throws {
+        let client = makeClient { req in
+            switch (req.httpMethod, req.url?.path) {
+            case ("DELETE", "/api/comments/r1/resolve"):
+                let json = """
+                {"id":"r1","content":"Answer","author_id":"u2","author_type":"member",
+                 "parent_id":"c1","issue_id":"i1","created_at":"2026-01-01T00:00:00Z",
+                 "resolved_at":null,"resolved_by_type":null,"resolved_by_id":null}
+                """.data(using: .utf8)!
+                return Self.response(for: req, body: json)
+            default:
+                XCTFail("Unexpected request: \(req.httpMethod ?? "") \(req.url?.absoluteString ?? "")")
+                return Self.response(for: req, body: Data("{}".utf8), status: 404)
+            }
+        }
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: client)
+        let date = ISO8601DateFormatter().date(from: "2026-01-01T00:00:00Z")!
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date),
+            Comment(id: "r1", content: "Answer", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date,
+                    resolvedAt: date, resolvedByType: "member", resolvedByID: "u2"),
+        ]
+
+        await vm.unresolveComment(commentId: "r1")
+
+        let r1 = vm.commentLoader.items.first { $0.id == "r1" }
+        XCTAssertNil(r1?.resolvedAt, "r1 should be unresolved")
+        XCTAssertNil(r1?.resolvedByID)
+        XCTAssertNil(vm.error)
+    }
+
+    func test_silentRefreshComments_mergesByIdWithoutClearing() async throws {
+        let date = ISO8601DateFormatter().date(from: "2026-01-01T00:00:00Z")!
+        let client = makeClient { req in
+            switch (req.httpMethod, req.url?.path) {
+            case ("GET", "/api/issues/i1/comments"):
+                // Fresh first page: c1 (updated) + a brand-new r3. r1/r2 are not
+                // returned but must be preserved as already-loaded deeper items.
+                let json = """
+                [{"id":"c1","content":"Root updated","author_id":"u1","author_type":"member","parent_id":null,"issue_id":"i1","created_at":"2026-01-01T00:00:00Z"},
+                 {"id":"r3","content":"New","author_id":"u4","author_type":"member","parent_id":"c1","issue_id":"i1","created_at":"2026-01-03T00:00:00Z"}]
+                """.data(using: .utf8)!
+                return Self.response(for: req, body: json)
+            default:
+                XCTFail("Unexpected request: \(req.httpMethod ?? "") \(req.url?.absoluteString ?? "")")
+                return Self.response(for: req, body: Data("{}".utf8), status: 404)
+            }
+        }
+        let vm = IssueDetailViewModel(issueId: "i1", workspaceId: "w1", api: client)
+        vm.commentLoader.items = [
+            Comment(id: "c1", content: "Root", authorId: "u1", authorType: "member", parentId: nil, issueId: "i1", createdAt: date),
+            Comment(id: "r1", content: "Reply", authorId: "u2", authorType: "member", parentId: "c1", issueId: "i1", createdAt: date),
+            Comment(id: "r2", content: "Nested", authorId: "u3", authorType: "member", parentId: "r1", issueId: "i1", createdAt: date),
+        ]
+        vm.didLoadComments = true
+
+        await vm.silentRefreshComments()
+
+        let ids = vm.commentLoader.items.map(\.id)
+        XCTAssertTrue(ids.contains("c1"), "c1 preserved/refreshed")
+        XCTAssertTrue(ids.contains("r3"), "new r3 from fresh page merged in")
+        XCTAssertTrue(ids.contains("r1") && ids.contains("r2"), "already-loaded deeper replies r1/r2 must NOT be cleared")
+        XCTAssertEqual(vm.commentLoader.items.first { $0.id == "c1" }?.content, "Root updated", "c1 fields replaced with fresh values")
+        XCTAssertNil(vm.commentsError)
+    }
+
     private func makeClient(
         workspaceId: String? = nil,
         workspaceSlug: String? = nil,

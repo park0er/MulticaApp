@@ -76,6 +76,11 @@ public enum AppStrings {
         return key
     }
 
+    /// Pluralized lookup: substitutes `{count}` in the localized template.
+    public static func localized(_ key: String, language: AppLanguage, count: Int) -> String {
+        localized(key, language: language).replacingOccurrences(of: "{count}", with: "\(count)")
+    }
+
     private static let zhHans: [String: String] = [
         "Account": "账号",
         "Active Tasks": "运行中的任务",
@@ -108,7 +113,17 @@ public enum AppStrings {
         "Chat": "聊天",
         "Clear Selection": "清除选择",
         "Comments": "评论",
+        "HTML Preview Debug": "HTML 预览调试",
         "Comment Actions": "评论操作",
+        "Resolve Thread": "解决该讨论",
+        "Resolve Thread with Comment": "以此评论解决讨论",
+        "Unresolve": "重新打开",
+        "Resolved": "已解决",
+        "Resolution": "结论",
+        "This thread is resolved": "此讨论已解决",
+        "N resolved comments": "{count} 条已解决评论",
+        "N comments folded": "{count} 条评论",
+        "Collapse": "收起",
         "Configure": "配置",
         "Created": "已创建",
         "Default": "默认",

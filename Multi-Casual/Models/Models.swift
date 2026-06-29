@@ -1931,6 +1931,15 @@ public struct Comment: Codable, Identifiable, Sendable {
     public let attachments: [Attachment]
     public let reactions: [Reaction]
     public let createdAt: Date
+    /// Non-nil when this comment is the resolved answer of its thread. Server
+    /// enforces a single-resolution invariant per thread (POST /resolve clears
+    /// any other resolution in the same thread), so at most one comment in a
+    /// thread has a non-nil resolvedAt at any time.
+    public let resolvedAt: Date?
+    public let resolvedByType: String?
+    public let resolvedByID: String?
+
+    public var isResolved: Bool { resolvedAt != nil }
 
     enum CodingKeys: String, CodingKey {
         case id, content
@@ -1940,11 +1949,15 @@ public struct Comment: Codable, Identifiable, Sendable {
         case issueId = "issue_id"
         case attachments, reactions
         case createdAt = "created_at"
+        case resolvedAt = "resolved_at"
+        case resolvedByType = "resolved_by_type"
+        case resolvedByID = "resolved_by_id"
     }
 
     public init(id: String, content: String, authorId: String, authorType: String,
                 parentId: String?, issueId: String, attachments: [Attachment] = [],
-                reactions: [Reaction] = [], createdAt: Date) {
+                reactions: [Reaction] = [], createdAt: Date,
+                resolvedAt: Date? = nil, resolvedByType: String? = nil, resolvedByID: String? = nil) {
         self.id = id
         self.content = content
         self.authorId = authorId
@@ -1954,6 +1967,9 @@ public struct Comment: Codable, Identifiable, Sendable {
         self.attachments = attachments
         self.reactions = reactions
         self.createdAt = createdAt
+        self.resolvedAt = resolvedAt
+        self.resolvedByType = resolvedByType
+        self.resolvedByID = resolvedByID
     }
 
     public init(from decoder: Decoder) throws {
@@ -1967,6 +1983,9 @@ public struct Comment: Codable, Identifiable, Sendable {
         attachments = try c.decodeIfPresent([Attachment].self, forKey: .attachments) ?? []
         reactions = try c.decodeIfPresent([Reaction].self, forKey: .reactions) ?? []
         createdAt = try c.decode(Date.self, forKey: .createdAt)
+        resolvedAt = try c.decodeIfPresent(Date.self, forKey: .resolvedAt)
+        resolvedByType = try c.decodeIfPresent(String.self, forKey: .resolvedByType)
+        resolvedByID = try c.decodeIfPresent(String.self, forKey: .resolvedByID)
     }
 
     public func replacingReactions(_ reactions: [Reaction]) -> Comment {
@@ -1979,7 +1998,29 @@ public struct Comment: Codable, Identifiable, Sendable {
             issueId: issueId,
             attachments: attachments,
             reactions: reactions,
-            createdAt: createdAt
+            createdAt: createdAt,
+            resolvedAt: resolvedAt,
+            resolvedByType: resolvedByType,
+            resolvedByID: resolvedByID
+        )
+    }
+
+    /// Returns a copy with the resolve fields replaced. Used for optimistic
+    /// updates and to apply the server-authoritative resolve state.
+    public func replacingResolved(at: Date?, byType: String?, byID: String?) -> Comment {
+        Comment(
+            id: id,
+            content: content,
+            authorId: authorId,
+            authorType: authorType,
+            parentId: parentId,
+            issueId: issueId,
+            attachments: attachments,
+            reactions: reactions,
+            createdAt: createdAt,
+            resolvedAt: at,
+            resolvedByType: byType,
+            resolvedByID: byID
         )
     }
 }

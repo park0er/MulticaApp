@@ -111,6 +111,9 @@ public final class IssueListViewModel {
     private var totalsByStatus: [IssueStatus: Int] = [:]
     private var pageHasMoreByStatus: [IssueStatus: Bool] = [:]
     private var isLoading = false
+    /// True while a background silent refresh is in flight. UI MUST NOT show a
+    /// spinner or empty state while this is true — existing items stay on screen.
+    public private(set) var isRefreshing = false
     private var pendingLoadAfterCurrent = false
     private var hasLoadedFirstPages = false
     private var searchSourceOffset = 0
@@ -186,14 +189,71 @@ public final class IssueListViewModel {
         }
     }
 
+    /// Deliberate reload for context switches (workspace / scope / filter /
+    /// create). Fetches fresh first pages into temp buckets, then swaps the
+    /// live state atomically — the list never shows an empty window while the
+    /// fetch is in flight (old data stays until the new data is ready).
     public func refresh() async {
-        resetPagination()
-        await loadNext()
+        guard let wsId = authSession.currentWorkspace?.id else {
+            lastError = UserVisibleError("Pick a workspace before opening Issues.")
+            return
+        }
+        guard !isSearching else { return }
+        do {
+            try await reloadFirstPages(workspaceId: wsId)
+            lastError = nil
+        } catch {
+            lastError = error
+        }
+    }
+
+    /// Pull-to-refresh: the system `.refreshable` overlay shows its own spinner.
+    /// Merges the first page in place (keeps already-loaded deeper pages) and
+    /// never clears the list. Falls back to a first load if nothing is loaded.
+    public func pullToRefresh() async {
+        if hasLoadedFirstPages {
+            await silentRefresh()
+        } else {
+            await loadNext()
+        }
+    }
+
+    /// Background auto-refresh (timer / scenePhase). Re-fetches the first page
+    /// of every status and merges in place by id — never clears the list, never
+    /// shows a spinner. Already-loaded deeper pages are preserved; pagination
+    /// cursors reset to the fresh first page so "load more" stays correct.
+    public func silentRefresh() async {
+        guard let wsId = authSession.currentWorkspace?.id else { return }
+        guard !isRefreshing, !isSearching, !isLoading else { return }
+        isRefreshing = true
+        defer { isRefreshing = false }
+        do {
+            let filter = try await serverFilter(workspaceId: wsId)
+            guard !filter.matchesNothing else { return }
+            for status in IssueStatus.listCases {
+                let page = try await api.listIssues(
+                    workspaceId: wsId,
+                    status: status,
+                    priority: priorityFilter,
+                    assigneeId: filter.assigneeId,
+                    assigneeIds: filter.assigneeIds,
+                    creatorId: filter.creatorId,
+                    limit: Self.pageSize,
+                    offset: 0
+                )
+                mergeFirstPage(page, for: status)
+            }
+            try await loadChildProgress(workspaceId: wsId)
+            syncFlatIssues()
+            lastError = nil
+        } catch {
+            // Silent failure: keep existing items. A subsequent refresh retries.
+        }
     }
 
     public func refreshIfIdle() async {
-        guard !isLoading, !isSearching else { return }
-        await refresh()
+        guard !isRefreshing, !isSearching else { return }
+        await silentRefresh()
     }
 
     public func setSearchQuery(_ query: String) async {
@@ -521,10 +581,14 @@ public final class IssueListViewModel {
     }
 
     private func loadChildProgress(workspaceId: String) async throws {
+        childProgressByParentIssueId = try await fetchChildProgressMap(workspaceId: workspaceId)
+    }
+
+    /// Fetches the child-issue progress map without writing it to live state, so
+    /// callers (e.g. `reloadFirstPages`) can stage it and swap atomically.
+    private func fetchChildProgressMap(workspaceId: String) async throws -> [String: ChildIssueProgressEntry] {
         let response = try await api.getChildIssueProgress(workspaceId: workspaceId)
-        childProgressByParentIssueId = Dictionary(
-            uniqueKeysWithValues: response.progress.map { ($0.parentIssueId, $0) }
-        )
+        return Dictionary(uniqueKeysWithValues: response.progress.map { ($0.parentIssueId, $0) })
     }
 
     private func append(_ page: PageResponse<Issue>, for status: IssueStatus) {
@@ -536,6 +600,57 @@ public final class IssueListViewModel {
         }
         pageHasMoreByStatus[status] = page.hasMore
         syncFlatIssues()
+    }
+
+    /// Fetch fresh first pages into temp buckets, then swap the live state
+    /// atomically. Used by `refresh()` for context switches so the list never
+    /// shows an empty window — old data stays visible until the new data lands.
+    private func reloadFirstPages(workspaceId: String) async throws {
+        let filter = try await serverFilter(workspaceId: workspaceId)
+        var buckets: [IssueStatus: [Issue]] = [:]
+        var offsets: [IssueStatus: Int] = [:]
+        var totals: [IssueStatus: Int] = [:]
+        var hasMore: [IssueStatus: Bool] = [:]
+        var progress = childProgressByParentIssueId
+        if !filter.matchesNothing {
+            for status in IssueStatus.listCases {
+                let page = try await api.listIssues(
+                    workspaceId: workspaceId,
+                    status: status,
+                    priority: priorityFilter,
+                    assigneeId: filter.assigneeId,
+                    assigneeIds: filter.assigneeIds,
+                    creatorId: filter.creatorId,
+                    limit: Self.pageSize,
+                    offset: 0
+                )
+                buckets[status] = orderedByPosition(page.items)
+                offsets[status] = page.items.count
+                if let total = page.total { totals[status] = total }
+                hasMore[status] = page.hasMore
+            }
+            progress = try await fetchChildProgressMap(workspaceId: workspaceId)
+        }
+        // Atomic swap — old data stays on screen until this assignment lands.
+        issuesByStatus = buckets
+        offsetsByStatus = offsets
+        totalsByStatus = totals
+        pageHasMoreByStatus = hasMore
+        childProgressByParentIssueId = progress
+        hasLoadedFirstPages = true
+        syncFlatIssues()
+    }
+
+    /// Merge a freshly-fetched first page for one status into the live bucket,
+    /// keeping already-loaded deeper-page items (by id) as the tail. Resets that
+    /// status's pagination cursor to the fresh page so "load more" stays correct.
+    private func mergeFirstPage(_ page: PageResponse<Issue>, for status: IssueStatus) {
+        let freshIds = Set(page.items.map { $0.id })
+        let tail = (issuesByStatus[status] ?? []).filter { !freshIds.contains($0.id) }
+        issuesByStatus[status] = orderedByPosition(page.items + tail)
+        offsetsByStatus[status] = page.items.count
+        if let total = page.total { totalsByStatus[status] = total }
+        pageHasMoreByStatus[status] = page.hasMore
     }
 
     private func syncFlatIssues() {

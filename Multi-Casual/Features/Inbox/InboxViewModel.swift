@@ -72,11 +72,48 @@ public final class InboxViewModel {
         }
     }
 
-    public func refresh() async { loader.reset(); await loadNext() }
+    /// Manual / pull-to-refresh path. The system `.refreshable` overlay shows
+    /// its own spinner; we never clear the existing items. First-ever load
+    /// (no data yet) falls through to the full load; otherwise refresh silently
+    /// in place so the list never flashes empty.
+    public func refresh() async {
+        if loader.hasLoadedOnce {
+            await silentRefresh()
+        } else {
+            loader.reset()
+            await loadNext()
+        }
+    }
+
+    /// Background auto-refresh (timer / scenePhase / workspace change). Pulls
+    /// the first page and merges in place by id — never clears the list, never
+    /// shows a spinner. UI MUST gate empty-state and spinner on `isLoading`
+    /// (not `isRefreshing`).
+    public func silentRefresh() async {
+        guard let workspace = authSession.currentWorkspace, !loader.isRefreshing else { return }
+        let pageSize = self.pageSize
+        do {
+            try await loader.silentRefreshFirstPage { [api, workspace, pageSize] offset in
+                try await api.listInbox(
+                    workspaceId: workspace.id,
+                    workspaceSlug: workspace.slug,
+                    limit: pageSize,
+                    offset: offset
+                )
+            }
+            loader.items = Self.deduplicateInboxItems(loader.items)
+            lastError = nil
+            updateUnreadCount()
+        } catch {
+            // Silent failure: keep existing items, do not flash an error for a
+            // background refresh. A subsequent refresh retries.
+        }
+    }
 
     public func refreshIfIdle() async {
         guard !loader.isLoading else { return }
-        await refresh()
+        guard !loader.isLoading, !loader.isRefreshing else { return }
+        await silentRefresh()
     }
 
     public func markRead(id: String) async {
