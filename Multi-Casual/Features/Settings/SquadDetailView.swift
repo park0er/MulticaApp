@@ -168,7 +168,8 @@ public struct SquadDetailView: View {
                     name: vm.entityName(type: member.memberType, id: member.memberId),
                     avatarUrl: vm.entityAvatarUrl(type: member.memberType, id: member.memberId),
                     kind: member.memberType == "agent" ? .agent : .user,
-                    size: 28
+                    size: 28,
+                    statusDot: member.memberType == "agent" ? statusDot(status?.status) : nil
                 )
                 MarkdownText(vm.entityName(type: member.memberType, id: member.memberId))
                     .font(.body.weight(.medium))
@@ -179,14 +180,9 @@ public struct SquadDetailView: View {
                 }
                 Spacer()
                 if member.memberType == "agent", let label = statusLabel(status?.status) {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(statusColor(status?.status))
-                            .frame(width: 7, height: 7)
-                        MarkdownText(label)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
+                    MarkdownText(label)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 } else {
                     MarkdownText(member.memberType == "agent" ? "Agent" : AppStrings.localized("Member", language: appLanguage))
                         .font(.caption2)
@@ -298,11 +294,13 @@ public struct SquadDetailView: View {
         return AppStrings.localized(key, language: appLanguage)
     }
 
-    private func statusColor(_ status: String?) -> Color {
+    private func statusDot(_ status: String?) -> AvatarView.StatusDot? {
         switch status {
-        case "working": return .green
-        case "unstable": return .orange
-        default: return .secondary
+        case "working": return .working
+        case "idle": return .idle
+        case "unstable": return .unstable
+        case "offline", "archived": return .offline
+        default: return nil
         }
     }
 
