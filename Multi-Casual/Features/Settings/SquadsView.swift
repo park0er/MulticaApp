@@ -1,5 +1,6 @@
 #if canImport(SwiftUI) && canImport(UIKit)
 import SwiftUI
+import UniformTypeIdentifiers
 
 public struct SquadsView: View {
     @Environment(APIClient.self) private var api
@@ -128,6 +129,9 @@ private struct SquadFormSheet: View {
     @State private var description: String
     @State private var instructions: String
     @State private var leaderId: String
+    @State private var avatarUrl: String
+    @State private var selectedMembers: Set<SquadsViewModel.MemberSelection>
+    @State private var isShowingAvatarImporter = false
 
     init(squad: Squad?, viewModel: SquadsViewModel) {
         self.squad = squad
@@ -136,6 +140,8 @@ private struct SquadFormSheet: View {
         _description = State(initialValue: squad?.description ?? "")
         _instructions = State(initialValue: squad?.instructions ?? "")
         _leaderId = State(initialValue: squad?.leaderId ?? "")
+        _avatarUrl = State(initialValue: squad?.avatarUrl ?? "")
+        _selectedMembers = State(initialValue: [])
     }
 
     private var isEditing: Bool { squad != nil }
@@ -144,6 +150,29 @@ private struct SquadFormSheet: View {
         NavigationStack {
             Form {
                 Section(AppStrings.localized("Squad", language: appLanguage)) {
+                    HStack(spacing: 12) {
+                        AvatarView(name: name.isEmpty ? "?" : name, avatarUrl: avatarUrl.isEmpty ? nil : avatarUrl, kind: .agent, size: 56)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Button {
+                                isShowingAvatarImporter = true
+                            } label: {
+                                if viewModel.isMutating {
+                                    ProgressView()
+                                } else {
+                                    Label(AppStrings.localized("Upload Avatar", language: appLanguage), systemImage: "photo")
+                                }
+                            }
+                            .disabled(viewModel.isMutating)
+                            .accessibilityIdentifier("SquadAvatarUploadButton")
+                            if !avatarUrl.isEmpty {
+                                Button(role: .destructive) {
+                                    avatarUrl = ""
+                                } label: {
+                                    Label(AppStrings.localized("Remove Avatar", language: appLanguage), systemImage: "xmark.circle")
+                                }
+                            }
+                        }
+                    }
                     TextField(AppStrings.localized("Name", language: appLanguage), text: $name)
                         .accessibilityIdentifier("SquadNameField")
                     TextField(AppStrings.localized("Description", language: appLanguage), text: $description, axis: .vertical)
@@ -152,20 +181,28 @@ private struct SquadFormSheet: View {
                 }
 
                 Section(AppStrings.localized("Leader", language: appLanguage)) {
-                    if viewModel.agents.isEmpty {
+                    if viewModel.leaderCandidates.isEmpty {
                         MarkdownText(AppStrings.localized("No agents available. Create an agent first.", language: appLanguage))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
                         Picker(AppStrings.localized("Leader", language: appLanguage), selection: $leaderId) {
                             Text(AppStrings.localized("Select a leader", language: appLanguage)).tag("")
-                            ForEach(viewModel.agents) { agent in
+                            ForEach(viewModel.leaderCandidates) { agent in
                                 MarkdownText(agent.name).tag(agent.id)
                             }
                         }
                         .pickerStyle(.navigationLink)
                         .accessibilityIdentifier("SquadLeaderPicker")
+                        .onChange(of: leaderId) { _, newLeader in
+                            // Promoting an agent to leader drops it from members.
+                            selectedMembers = selectedMembers.filter { !($0.type == "agent" && $0.id == newLeader) }
+                        }
                     }
+                }
+
+                if !isEditing {
+                    membersSection
                 }
 
                 if isEditing {
@@ -190,6 +227,13 @@ private struct SquadFormSheet: View {
                 ? AppStrings.localized("Edit Squad", language: appLanguage)
                 : AppStrings.localized("New Squad", language: appLanguage))
             .navigationBarTitleDisplayMode(.inline)
+            .fileImporter(
+                isPresented: $isShowingAvatarImporter,
+                allowedContentTypes: [.image],
+                allowsMultipleSelection: false
+            ) { result in
+                handleAvatarImport(result)
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(AppStrings.localized("Cancel", language: appLanguage)) { dismiss() }
@@ -211,6 +255,67 @@ private struct SquadFormSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var membersSection: some View {
+        Section(AppStrings.localized("Members", language: appLanguage)) {
+            let agentRows = viewModel.leaderCandidates.filter { $0.id != leaderId }
+            if agentRows.isEmpty && viewModel.members.isEmpty {
+                MarkdownText(AppStrings.localized("No members to add.", language: appLanguage))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(agentRows) { agent in
+                    memberToggleRow(
+                        selection: .init(type: "agent", id: agent.id),
+                        title: agent.name,
+                        subtitle: "Agent",
+                        avatarUrl: agent.avatarUrl,
+                        kind: .agent
+                    )
+                }
+                ForEach(viewModel.members) { member in
+                    memberToggleRow(
+                        selection: .init(type: "member", id: member.userId),
+                        title: member.name,
+                        subtitle: member.email,
+                        avatarUrl: member.avatarUrl,
+                        kind: .user
+                    )
+                }
+            }
+        }
+    }
+
+    private func memberToggleRow(
+        selection: SquadsViewModel.MemberSelection,
+        title: String,
+        subtitle: String,
+        avatarUrl: String?,
+        kind: AvatarView.Kind
+    ) -> some View {
+        Button {
+            if selectedMembers.contains(selection) {
+                selectedMembers.remove(selection)
+            } else {
+                selectedMembers.insert(selection)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                AvatarView(name: title, avatarUrl: avatarUrl, kind: kind, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    MarkdownText(title).font(.body)
+                    if !subtitle.isEmpty {
+                        MarkdownText(subtitle).font(.caption2).foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                Image(systemName: selectedMembers.contains(selection) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selectedMembers.contains(selection) ? Color.accentColor : Color.secondary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private var canSubmit: Bool {
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !viewModel.isMutating else {
             return false
@@ -228,19 +333,40 @@ private struct SquadFormSheet: View {
                 name: name,
                 description: description,
                 instructions: instructions,
-                leaderId: leaderId.isEmpty ? nil : leaderId
+                leaderId: leaderId.isEmpty ? nil : leaderId,
+                avatarUrl: avatarUrl
             )
         } else {
             saved = await viewModel.createSquad(
                 name: name,
                 description: description,
                 leaderId: leaderId,
-                avatarUrl: nil
+                avatarUrl: avatarUrl.isEmpty ? nil : avatarUrl,
+                memberSelections: Array(selectedMembers)
             )
         }
 
         if saved != nil {
             dismiss()
+        }
+    }
+
+    private func handleAvatarImport(_ result: Result<[URL], Error>) {
+        do {
+            guard let url = try result.get().first else { return }
+            let payload = try AttachmentImport.payload(from: url)
+            Task {
+                if let uploadedUrl = await viewModel.uploadAvatarFile(
+                    filename: payload.filename,
+                    data: payload.data,
+                    contentType: payload.contentType
+                ) {
+                    avatarUrl = uploadedUrl
+                }
+            }
+        } catch {
+            // Surface import failures through the shared error channel.
+            viewModel.errorMessage = error.localizedDescription
         }
     }
 }

@@ -18,6 +18,8 @@ final class SquadsViewModelTests: XCTestCase {
                 return Self.response(for: req, body: Self.squadsArrayJSON())
             case "/api/agents":
                 return Self.response(for: req, body: Self.agentsArrayJSON())
+            case "/api/workspaces/w1/members":
+                return Self.response(for: req, body: Data("[]".utf8))
             default:
                 XCTFail("Unexpected request: \(req.url?.path ?? "")")
                 return Self.response(for: req, body: Data(), status: 404)
@@ -54,7 +56,7 @@ final class SquadsViewModelTests: XCTestCase {
         let vm = SquadsViewModel(api: client, authSession: makeSession())
 
         let created = await vm.createSquad(name: " Mobile ", description: "iOS", leaderId: "a1", avatarUrl: nil)
-        let updated = await vm.updateSquad(id: "s1", name: "Renamed", description: "", instructions: "x", leaderId: "a1")
+        let updated = await vm.updateSquad(id: "s1", name: "Renamed", description: "", instructions: "x", leaderId: "a1", avatarUrl: nil)
         await vm.deleteSquad(id: "s2")
 
         XCTAssertEqual(created?.id, "s2")
@@ -65,6 +67,42 @@ final class SquadsViewModelTests: XCTestCase {
             "PUT /api/squads/s1",
             "DELETE /api/squads/s2",
         ])
+        XCTAssertNil(vm.errorMessage)
+    }
+
+    func test_createSquadAddsSelectedMembersExcludingLeader() async throws {
+        var memberPosts: [(type: String?, id: String?)] = []
+        let client = makeClient { req in
+            switch (req.httpMethod, req.url?.path) {
+            case ("POST", "/api/squads"):
+                return Self.response(for: req, body: Self.squadJSON(id: "s9", name: "Mobile", leaderId: "a1"))
+            case ("POST", "/api/squads/s9/members"):
+                let body = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
+                memberPosts.append((body?["member_type"] as? String, body?["member_id"] as? String))
+                return Self.response(for: req, body: #"{"member_type":"member","member_id":"u2","role":"member"}"#.data(using: .utf8)!)
+            default:
+                XCTFail("Unexpected request: \(req.httpMethod ?? "") \(req.url?.absoluteString ?? "")")
+                return Self.response(for: req, body: Data(), status: 404)
+            }
+        }
+        let vm = SquadsViewModel(api: client, authSession: makeSession())
+
+        let created = await vm.createSquad(
+            name: "Mobile",
+            description: "",
+            leaderId: "a1",
+            avatarUrl: nil,
+            memberSelections: [
+                .init(type: "agent", id: "a1"),   // leader — must be skipped
+                .init(type: "member", id: "u2"),
+            ]
+        )
+
+        XCTAssertEqual(created?.id, "s9")
+        // Only the non-leader member is posted.
+        XCTAssertEqual(memberPosts.count, 1)
+        XCTAssertEqual(memberPosts.first?.type, "member")
+        XCTAssertEqual(memberPosts.first?.id, "u2")
         XCTAssertNil(vm.errorMessage)
     }
 

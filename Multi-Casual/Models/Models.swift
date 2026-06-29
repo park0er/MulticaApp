@@ -558,6 +558,41 @@ public struct Squad: Codable, Identifiable, Sendable, Hashable {
     }
 }
 
+public struct SquadMember: Codable, Identifiable, Sendable, Hashable {
+    public let memberType: String
+    public let memberId: String
+    public let role: String
+    public let squadId: String?
+    public let createdAt: Date?
+
+    public var id: String { "\(memberType):\(memberId)" }
+
+    enum CodingKeys: String, CodingKey {
+        case role
+        case memberType = "member_type"
+        case memberId = "member_id"
+        case squadId = "squad_id"
+        case createdAt = "created_at"
+    }
+
+    public init(memberType: String, memberId: String, role: String = "", squadId: String? = nil, createdAt: Date? = nil) {
+        self.memberType = memberType
+        self.memberId = memberId
+        self.role = role
+        self.squadId = squadId
+        self.createdAt = createdAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        memberType = try container.decodeIfPresent(String.self, forKey: .memberType) ?? ""
+        memberId = try container.decodeIfPresent(String.self, forKey: .memberId) ?? ""
+        role = try container.decodeIfPresent(String.self, forKey: .role) ?? ""
+        squadId = try container.decodeIfPresent(String.self, forKey: .squadId)
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    }
+}
+
 public enum MentionEntityType: String, Codable, CaseIterable, Sendable, Hashable {
     case person
     case agent

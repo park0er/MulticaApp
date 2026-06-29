@@ -1215,6 +1215,18 @@ public final class APIClient: @unchecked Sendable {
         }
     }
 
+    private struct SquadMemberMutationRequest: Encodable {
+        let memberType: String
+        let memberId: String
+        let role: String?
+
+        enum CodingKeys: String, CodingKey {
+            case memberType = "member_type"
+            case memberId = "member_id"
+            case role
+        }
+    }
+
     private struct IssueSubscriberMutationRequest: Encodable {
         let userId: String?
         let userType: String?
@@ -1739,6 +1751,26 @@ public final class APIClient: @unchecked Sendable {
 
     public func deleteSquad(id: String, workspaceId: String? = nil) async throws {
         let _: EmptyResponse = try await request("DELETE", path: "api/squads/\(id)", queryItems: workspaceQuery(workspaceId))
+    }
+
+    /// Adds a member (agent or workspace member) to a squad. Mirrors the web
+    /// CreateSquadModal which posts each selected member after the squad is
+    /// created. `memberType` is "agent" or "member"; for agents `memberId` is
+    /// the agent id, for members it is the user id.
+    @discardableResult
+    public func addSquadMember(
+        squadId: String,
+        memberType: String,
+        memberId: String,
+        role: String? = nil,
+        workspaceId: String? = nil
+    ) async throws -> SquadMember {
+        try await request(
+            "POST",
+            path: "api/squads/\(squadId)/members",
+            queryItems: workspaceQuery(workspaceId),
+            body: SquadMemberMutationRequest(memberType: memberType, memberId: memberId, role: role)
+        )
     }
 
     public func getAgent(id: String, workspaceId: String? = nil) async throws -> Agent {

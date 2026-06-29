@@ -2057,6 +2057,34 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(capturedRequest?.url?.query, "workspace_id=w1")
     }
 
+    func test_addSquadMember_postsMemberTypeAndId() async throws {
+        var capturedRequest: URLRequest?
+        var capturedBody: [String: Any]?
+        let json = #"{"member_type":"member","member_id":"u2","role":"member","squad_id":"s1","created_at":"2026-01-01T00:00:00Z"}"#.data(using: .utf8)!
+        MockURLProtocol.handler = { req in
+            capturedRequest = req
+            capturedBody = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, json)
+        }
+
+        let member = try await client.addSquadMember(
+            squadId: "s1",
+            memberType: "member",
+            memberId: "u2",
+            role: "member",
+            workspaceId: "w1"
+        )
+
+        XCTAssertEqual(capturedRequest?.httpMethod, "POST")
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/squads/s1/members")
+        XCTAssertEqual(capturedRequest?.url?.query, "workspace_id=w1")
+        XCTAssertEqual(capturedBody?["member_type"] as? String, "member")
+        XCTAssertEqual(capturedBody?["member_id"] as? String, "u2")
+        XCTAssertEqual(capturedBody?["role"] as? String, "member")
+        XCTAssertEqual(member.memberId, "u2")
+        XCTAssertEqual(member.memberType, "member")
+    }
+
     func test_getAgentUsesDesktopEndpointAndWorkspaceScope() async throws {
         var capturedRequest: URLRequest?
         MockURLProtocol.handler = { req in
