@@ -593,6 +593,91 @@ public struct SquadMember: Codable, Identifiable, Sendable, Hashable {
     }
 }
 
+public struct SquadActiveIssueBrief: Codable, Sendable, Hashable, Identifiable {
+    public let issueId: String
+    public let identifier: String
+    public let title: String
+    public let issueStatus: String
+
+    public var id: String { issueId }
+
+    enum CodingKeys: String, CodingKey {
+        case identifier, title
+        case issueId = "issue_id"
+        case issueStatus = "issue_status"
+    }
+
+    public init(issueId: String, identifier: String, title: String, issueStatus: String) {
+        self.issueId = issueId
+        self.identifier = identifier
+        self.title = title
+        self.issueStatus = issueStatus
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        issueId = try c.decodeIfPresent(String.self, forKey: .issueId) ?? ""
+        identifier = try c.decodeIfPresent(String.self, forKey: .identifier) ?? ""
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        issueStatus = try c.decodeIfPresent(String.self, forKey: .issueStatus) ?? ""
+    }
+}
+
+/// Per-squad-member presence snapshot. `status` is kept as a lenient optional
+/// string (matching the web's `string | null`) so a new server-side bucket
+/// can't break decoding; human members come back with status == nil.
+public struct SquadMemberStatus: Codable, Sendable, Hashable, Identifiable {
+    public let memberType: String
+    public let memberId: String
+    public let status: String?
+    public let activeIssues: [SquadActiveIssueBrief]
+    public let lastActiveAt: Date?
+
+    public var id: String { "\(memberType):\(memberId)" }
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case memberType = "member_type"
+        case memberId = "member_id"
+        case activeIssues = "active_issues"
+        case lastActiveAt = "last_active_at"
+    }
+
+    public init(memberType: String, memberId: String, status: String?, activeIssues: [SquadActiveIssueBrief] = [], lastActiveAt: Date? = nil) {
+        self.memberType = memberType
+        self.memberId = memberId
+        self.status = status
+        self.activeIssues = activeIssues
+        self.lastActiveAt = lastActiveAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        memberType = try c.decodeIfPresent(String.self, forKey: .memberType) ?? ""
+        memberId = try c.decodeIfPresent(String.self, forKey: .memberId) ?? ""
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        activeIssues = try c.decodeIfPresent([SquadActiveIssueBrief].self, forKey: .activeIssues) ?? []
+        lastActiveAt = try c.decodeIfPresent(Date.self, forKey: .lastActiveAt)
+    }
+}
+
+public struct SquadMemberStatusListResponse: Codable, Sendable {
+    public let members: [SquadMemberStatus]
+
+    enum CodingKeys: String, CodingKey { case members }
+
+    public init(members: [SquadMemberStatus]) { self.members = members }
+
+    public init(from decoder: Decoder) throws {
+        if let array = try? [SquadMemberStatus](from: decoder) {
+            members = array
+            return
+        }
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        members = try c.decodeIfPresent([SquadMemberStatus].self, forKey: .members) ?? []
+    }
+}
+
 public enum MentionEntityType: String, Codable, CaseIterable, Sendable, Hashable {
     case person
     case agent

@@ -8,6 +8,7 @@ public final class SquadDetailViewModel {
     public private(set) var members: [SquadMember] = []
     public private(set) var agents: [Agent] = []
     public private(set) var workspaceMembers: [WorkspaceMember] = []
+    public private(set) var memberStatusById: [String: SquadMemberStatus] = [:]
     public var isLoading = false
     public var isMutating = false
     public var errorMessage: String?
@@ -43,6 +44,25 @@ public final class SquadDetailViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+        await loadMemberStatus()
+    }
+
+    /// Presence snapshot is non-fatal: a failure leaves rows without a status
+    /// pill rather than blocking the page.
+    private func loadMemberStatus() async {
+        guard let workspaceId else { return }
+        do {
+            let response = try await api.getSquadMemberStatus(squadId: squad.id, workspaceId: workspaceId)
+            var map: [String: SquadMemberStatus] = [:]
+            for entry in response.members { map[entry.memberId] = entry }
+            memberStatusById = map
+        } catch {
+            // keep whatever we had; presence is an enhancement.
+        }
+    }
+
+    public func status(for member: SquadMember) -> SquadMemberStatus? {
+        memberStatusById[member.memberId]
     }
 
     // MARK: - Display helpers
@@ -177,6 +197,7 @@ public final class SquadDetailViewModel {
             try await operation()
             members = try await api.listSquadMembers(squadId: squad.id, workspaceId: workspaceId)
             await WorkspaceMetadataCache.shared.invalidate(workspaceId: workspaceId, api: api)
+            await loadMemberStatus()
         } catch {
             errorMessage = error.localizedDescription
         }

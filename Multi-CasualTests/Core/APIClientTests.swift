@@ -2145,6 +2145,31 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(member.role, "能力很一般，可以凑数打杂")
     }
 
+    func test_getSquadMemberStatus_decodesBucketsAndActiveIssues() async throws {
+        var capturedRequest: URLRequest?
+        let json = """
+        {"members":[
+          {"member_type":"agent","member_id":"a1","status":"working",
+           "active_issues":[{"issue_id":"i1","identifier":"PAR-1","title":"Do work","issue_status":"in_progress"}],
+           "last_active_at":"2026-01-01T00:00:00Z"},
+          {"member_type":"member","member_id":"u1","status":null,"active_issues":[],"last_active_at":null}
+        ]}
+        """.data(using: .utf8)!
+        MockURLProtocol.handler = { req in
+            capturedRequest = req
+            return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, json)
+        }
+
+        let resp = try await client.getSquadMemberStatus(squadId: "s1", workspaceId: "w1")
+
+        XCTAssertEqual(capturedRequest?.httpMethod, "GET")
+        XCTAssertEqual(capturedRequest?.url?.path, "/api/squads/s1/members/status")
+        XCTAssertEqual(resp.members.count, 2)
+        XCTAssertEqual(resp.members.first?.status, "working")
+        XCTAssertEqual(resp.members.first?.activeIssues.first?.identifier, "PAR-1")
+        XCTAssertNil(resp.members.last?.status)
+    }
+
     func test_getAgentUsesDesktopEndpointAndWorkspaceScope() async throws {
         var capturedRequest: URLRequest?
         MockURLProtocol.handler = { req in

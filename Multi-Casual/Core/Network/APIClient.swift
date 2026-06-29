@@ -1809,6 +1809,12 @@ public final class APIClient: @unchecked Sendable {
         )
     }
 
+    /// Per-member presence snapshot (working / idle / offline / unstable /
+    /// archived) plus each member's currently active issues.
+    public func getSquadMemberStatus(squadId: String, workspaceId: String? = nil) async throws -> SquadMemberStatusListResponse {
+        try await request("GET", path: "api/squads/\(squadId)/members/status", queryItems: workspaceQuery(workspaceId))
+    }
+
     public func getAgent(id: String, workspaceId: String? = nil) async throws -> Agent {
         try await request("GET", path: "api/agents/\(id)", queryItems: workspaceQuery(workspaceId))
     }

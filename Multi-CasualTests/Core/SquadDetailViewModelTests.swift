@@ -19,6 +19,8 @@ final class SquadDetailViewModelTests: XCTestCase {
                 return Self.response(for: req, body: Self.agentsJSON())
             case "/api/workspaces/w1/members":
                 return Self.response(for: req, body: Data("[]".utf8))
+            case "/api/squads/s1/members/status":
+                return Self.response(for: req, body: Self.statusJSON())
             default:
                 XCTFail("Unexpected: \(req.url?.path ?? "")")
                 return Self.response(for: req, body: Data(), status: 404)
@@ -32,9 +34,10 @@ final class SquadDetailViewModelTests: XCTestCase {
         XCTAssertEqual(vm.members.first?.role, "leader, can also review")
         XCTAssertEqual(vm.entityName(type: "agent", id: "a1"), "Codex")
         XCTAssertTrue(vm.isLeader(vm.members[0]))
+        XCTAssertEqual(vm.status(for: vm.members[0])?.status, "working")
+        XCTAssertEqual(vm.status(for: vm.members[0])?.activeIssues.first?.identifier, "PAR-1")
         XCTAssertNil(vm.errorMessage)
     }
-
     func test_updateMemberRoleEditsDescriptionAndReloads() async throws {
         var patched: [String: Any]?
         var memberListCalls = 0
@@ -50,6 +53,8 @@ final class SquadDetailViewModelTests: XCTestCase {
                 return Self.response(for: req, body: Self.agentsJSON())
             case ("GET", "/api/workspaces/w1/members"):
                 return Self.response(for: req, body: Data("[]".utf8))
+            case ("GET", "/api/squads/s1/members/status"):
+                return Self.response(for: req, body: Self.statusJSON())
             case ("PATCH", "/api/squads/s1/members/role"):
                 patched = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
                 return Self.response(for: req, body: Self.membersJSON(role: "技术能力比 mimo 更强").dropArray())
@@ -81,6 +86,8 @@ final class SquadDetailViewModelTests: XCTestCase {
                 return Self.response(for: req, body: Self.agentsJSON())
             case ("GET", "/api/workspaces/w1/members"):
                 return Self.response(for: req, body: Data("[]".utf8))
+            case ("GET", "/api/squads/s1/members/status"):
+                return Self.response(for: req, body: Self.statusJSON())
             case ("POST", "/api/squads/s1/members"):
                 posted = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
                 return Self.response(for: req, body: #"{"member_type":"member","member_id":"u2","role":"helper"}"#.data(using: .utf8)!)
@@ -112,6 +119,8 @@ final class SquadDetailViewModelTests: XCTestCase {
                 return Self.response(for: req, body: Self.agentsJSON())
             case ("GET", "/api/workspaces/w1/members"):
                 return Self.response(for: req, body: Data("[]".utf8))
+            case ("GET", "/api/squads/s1/members/status"):
+                return Self.response(for: req, body: Self.statusJSON())
             case ("PUT", "/api/squads/s1"):
                 put = try? JSONSerialization.jsonObject(with: MockURLProtocol.bodyData(for: req)) as? [String: Any]
                 return Self.response(for: req, body: Self.squadJSON(leaderId: "a9"))
@@ -166,6 +175,14 @@ final class SquadDetailViewModelTests: XCTestCase {
     private static func membersJSON(role: String = "leader, can also review") -> Data {
         """
         [{"id":"sm1","squad_id":"s1","member_type":"agent","member_id":"a1","role":"\(role)","created_at":"2026-01-01T00:00:00Z"}]
+        """.data(using: .utf8)!
+    }
+
+    private static func statusJSON() -> Data {
+        """
+        {"members":[{"member_type":"agent","member_id":"a1","status":"working",
+          "active_issues":[{"issue_id":"i1","identifier":"PAR-1","title":"Do work","issue_status":"in_progress"}],
+          "last_active_at":"2026-01-01T00:00:00Z"}]}
         """.data(using: .utf8)!
     }
 

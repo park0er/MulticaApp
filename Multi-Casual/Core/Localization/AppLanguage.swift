@@ -169,6 +169,8 @@ public enum AppStrings {
         "Role / description": "角色 / 描述",
         "Select a member or agent": "选择成员或 Agent",
         "Add": "添加",
+        "Archived": "已归档",
+        "Last active": "最近活动",
         "Upload Avatar": "上传头像",
         "Remove Avatar": "移除头像",
         "No members to add.": "没有可添加的成员。",

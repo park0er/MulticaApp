@@ -161,6 +161,7 @@ public struct SquadDetailView: View {
 
     @ViewBuilder
     private func memberRow(_ member: SquadMember, vm: SquadDetailViewModel) -> some View {
+        let status = vm.status(for: member)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
                 AvatarView(
@@ -177,9 +178,20 @@ public struct SquadDetailView: View {
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                MarkdownText(member.memberType == "agent" ? "Agent" : AppStrings.localized("Member", language: appLanguage))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                if member.memberType == "agent", let label = statusLabel(status?.status) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(statusColor(status?.status))
+                            .frame(width: 7, height: 7)
+                        MarkdownText(label)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    MarkdownText(member.memberType == "agent" ? "Agent" : AppStrings.localized("Member", language: appLanguage))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
             }
             // The free-text per-member role / description (web's RoleEditor).
             TextField(
@@ -197,6 +209,19 @@ public struct SquadDetailView: View {
                 }
                 .font(.caption)
                 .disabled(vm.isMutating)
+            }
+            if let issue = status?.activeIssues.first {
+                MarkdownIconLabel("\(issue.identifier) \(issue.title)", systemImage: "smallcircle.filled.circle")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            if member.memberType == "agent",
+               let last = status?.lastActiveAt,
+               (status?.status ?? "") != "working" {
+                MarkdownText("\(AppStrings.localized("Last active", language: appLanguage)) \(Self.relativeTime(last))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
@@ -257,6 +282,34 @@ public struct SquadDetailView: View {
         var drafts: [String: String] = [:]
         for member in vm.members { drafts[member.id] = member.role }
         roleDrafts = drafts
+    }
+
+    private func statusLabel(_ status: String?) -> String? {
+        guard let status, !status.isEmpty else { return nil }
+        let key: String
+        switch status {
+        case "working": key = "Working"
+        case "idle": key = "Idle"
+        case "offline": key = "Offline"
+        case "unstable": key = "Unstable"
+        case "archived": key = "Archived"
+        default: return nil
+        }
+        return AppStrings.localized(key, language: appLanguage)
+    }
+
+    private func statusColor(_ status: String?) -> Color {
+        switch status {
+        case "working": return .green
+        case "unstable": return .orange
+        default: return .secondary
+        }
+    }
+
+    private static func relativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
     private func handleAvatarImport(_ result: Result<[URL], Error>, vm: SquadDetailViewModel) {
