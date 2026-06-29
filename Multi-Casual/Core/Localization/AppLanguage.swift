@@ -123,6 +123,7 @@ public enum AppStrings {
         "This thread is resolved": "此讨论已解决",
         "N resolved comments": "{count} 条已解决评论",
         "N comments folded": "{count} 条评论",
+        "Collapse": "收起",
         "Configure": "配置",
         "Created": "已创建",
         "Default": "默认",

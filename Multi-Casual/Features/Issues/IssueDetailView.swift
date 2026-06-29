@@ -654,6 +654,10 @@ public struct IssueDetailView: View {
                     }
                     .padding(.horizontal)
                 } else {
+                    CollapseResolvedBar(language: appLanguage) {
+                        expandedResolvedThreads.remove(thread.id)
+                    }
+                    .padding(.horizontal)
                     commentRow(thread.root, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
                     ForEach(thread.replies) { reply in
                         commentRow(reply, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
@@ -674,6 +678,10 @@ public struct IssueDetailView: View {
                     }
                     .padding(.leading, 28)
                 } else {
+                    CollapseResolvedBar(language: appLanguage) {
+                        expandedResolvedThreads.remove(thread.id)
+                    }
+                    .padding(.leading, 28)
                     ForEach(otherReplies) { reply in
                         commentRow(reply, vm: vm, currentUserId: currentUserId, markdownContext: markdownContext)
                             .padding(.leading, 28)
@@ -1792,6 +1800,34 @@ private struct CommentsFoldBar: View {
         .accessibilityIdentifier("CommentsFoldBar")
         .accessibilityLabel(AppStrings.localized("N comments folded", language: language, count: count))
         .accessibilityValue("Collapsed")
+    }
+}
+
+/// Shown at the top of an EXPANDED resolved thread so the user can fold it
+/// back up. Mirrors web's sticky "Collapse" affordance. Tapping re-collapses
+/// the thread (root-resolution folds the whole thread back to ResolvedThreadBar;
+/// reply-resolution re-hides the middle replies behind CommentsFoldBar).
+private struct CollapseResolvedBar: View {
+    let language: AppLanguage
+    let onCollapse: () -> Void
+
+    var body: some View {
+        Button(action: onCollapse) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.up")
+                    .font(.caption2)
+                MarkdownText(AppStrings.localized("Collapse", language: language))
+                    .font(.caption.bold())
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(Color.green.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("CollapseResolvedBar")
+        .accessibilityLabel(AppStrings.localized("Collapse", language: language))
     }
 }
 
