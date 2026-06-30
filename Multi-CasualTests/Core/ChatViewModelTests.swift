@@ -374,7 +374,14 @@ final class ChatViewModelTests: XCTestCase {
     private func makeClient(handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)) -> APIClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
-        MockURLProtocol.handler = handler
+        MockURLProtocol.handler = { req in
+            switch req.url?.path {
+            case "/api/runtimes", "/api/agent-task-snapshot":
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            default:
+                return try handler(req)
+            }
+        }
         return APIClient(session: URLSession(configuration: config), token: "test-token")
     }
 

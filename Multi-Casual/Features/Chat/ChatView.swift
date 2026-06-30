@@ -28,7 +28,13 @@ public struct ChatView: View {
                             NavigationLink {
                                 ChatSessionDetailView(viewModel: vm, session: session)
                             } label: {
-                                ChatSessionRow(session: session, agentName: vm.agentName(for: session.agentId), pendingCount: vm.pendingTaskCount(for: session))
+                                ChatSessionRow(
+                                    session: session,
+                                    agentName: vm.agentName(for: session.agentId),
+                                    agentAvatarUrl: vm.agentAvatarUrl(for: session.agentId),
+                                    agentStatusDot: vm.agentStatusDot(for: session.agentId),
+                                    pendingCount: vm.pendingTaskCount(for: session)
+                                )
                             }
                         }
                     }
@@ -75,13 +81,18 @@ public struct ChatView: View {
 private struct ChatSessionRow: View {
     let session: ChatSession
     let agentName: String
+    var agentAvatarUrl: String? = nil
+    var agentStatusDot: AvatarView.StatusDot? = nil
     let pendingCount: Int
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: pendingCount > 0 ? "message.badge.waveform" : "message")
-                .foregroundStyle(session.hasUnread ? Color.accentColor : Color.secondary)
-                .frame(width: 24)
+            AvatarView(name: agentName, avatarUrl: agentAvatarUrl, kind: .agent, size: 28, statusDot: agentStatusDot)
+                .overlay(alignment: .topLeading) {
+                    if session.hasUnread {
+                        Circle().fill(Color.accentColor).frame(width: 8, height: 8).offset(x: -2, y: -2)
+                    }
+                }
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     MarkdownText(session.title)

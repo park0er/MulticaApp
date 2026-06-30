@@ -10,6 +10,8 @@ public final class ChatViewModel {
     public var members: [WorkspaceMember] = []
     public var agents: [Agent] = []
     public var squads: [Squad] = []
+    /// Live presence per agent id, used to render status dots on chat rows.
+    public var presenceByAgentId: [String: AgentPresenceSummary] = [:]
     public var messages: [ChatMessage] = []
     public var draftAttachments: [Attachment] = []
     public var selectedSession: ChatSession?
@@ -77,6 +79,7 @@ public final class ChatViewModel {
         } catch {
             errorMessage = error.localizedDescription
         }
+        presenceByAgentId = await WorkspaceMetadataCache.shared.agentPresence(workspaceId: workspaceId, api: api)
     }
 
     public var messageMarkdownContext: MarkdownRenderContext {
@@ -315,6 +318,14 @@ public final class ChatViewModel {
 
     public func agentName(for agentId: String) -> String {
         agents.first { $0.id == agentId }?.name ?? String(agentId.prefix(8))
+    }
+
+    public func agentAvatarUrl(for agentId: String) -> String? {
+        agents.first { $0.id == agentId }?.avatarUrl
+    }
+
+    public func agentStatusDot(for agentId: String) -> AvatarView.StatusDot? {
+        presenceByAgentId[agentId]?.avatarStatusDot
     }
 
     public func pendingTaskCount(for session: ChatSession) -> Int {
