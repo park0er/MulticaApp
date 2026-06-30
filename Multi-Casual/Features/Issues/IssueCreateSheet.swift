@@ -305,7 +305,7 @@ private struct IssueCreateForm: View {
             MentionCandidatePickerSheet(candidates: viewModel.mentionCandidates, query: Binding(
                 get: { descriptionMentionQuery ?? "" },
                 set: { descriptionMentionQuery = $0 }
-            )) { candidate in
+            ), presence: viewModel.presenceByAgentId) { candidate in
                 IssueDetailViewModel.appendMention(
                     candidate,
                     to: &viewModel.description,

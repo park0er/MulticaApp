@@ -184,7 +184,7 @@ public struct IssueEditSheet: View {
                 MentionCandidatePickerSheet(candidates: vm.mentionCandidates, query: Binding(
                     get: { descriptionMentionQuery ?? "" },
                     set: { descriptionMentionQuery = $0 }
-                )) { candidate in
+                ), presence: vm.presenceByAgentId) { candidate in
                     IssueDetailViewModel.appendMention(
                         candidate,
                         to: &vm.description,

@@ -116,6 +116,8 @@ public final class IssueDetailViewModel {
     public var subscriberMembers: [WorkspaceMember] = []
     public var subscriberAgents: [Agent] = []
     public var subscriberSquads: [Squad] = []
+    /// Live presence per agent id, used to render status dots in the mention picker.
+    public var presenceByAgentId: [String: AgentPresenceSummary] = [:]
     public let commentLoader = PaginatedLoader<Comment>()
     public private(set) var commentSortOrder: CommentSortOrder = .descending
     public var commentDraft = ""
@@ -519,6 +521,7 @@ public final class IssueDetailViewModel {
             subscriberMembers = loadedMembers
             subscriberAgents = loadedAgents
             subscriberSquads = loadedSquads
+            presenceByAgentId = await WorkspaceMetadataCache.shared.agentPresence(workspaceId: workspaceId, api: api)
 
             if let assigneeId = issue.assigneeId, let assigneeType = issue.assigneeType {
                 switch assigneeType {

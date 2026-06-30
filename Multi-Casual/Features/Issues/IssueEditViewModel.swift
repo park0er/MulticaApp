@@ -80,6 +80,9 @@ public final class IssueEditViewModel {
         assigneeOptions.first { $0.id == selectedAssigneeOptionId }
     }
 
+    /// Live presence per agent id, used to render status dots in the mention picker.
+    public var presenceByAgentId: [String: AgentPresenceSummary] = [:]
+
     public var mentionCandidates: [MentionCandidate] {
         assigneeOptions.map {
             MentionCandidate(
@@ -202,6 +205,7 @@ public final class IssueEditViewModel {
         if didFail {
             errorMessage = "Some workspace options could not be loaded."
         }
+        presenceByAgentId = await WorkspaceMetadataCache.shared.agentPresence(workspaceId: workspaceId, api: api)
     }
 
     public func submit() async -> Issue? {

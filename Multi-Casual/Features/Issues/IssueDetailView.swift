@@ -1060,7 +1060,7 @@ public struct IssueDetailView: View {
             MentionCandidatePickerSheet(candidates: vm.mentionCandidates, query: Binding(
                 get: { commentMentionQuery ?? "" },
                 set: { commentMentionQuery = $0 }
-            )) { candidate in
+            ), presence: vm.presenceByAgentId) { candidate in
                 vm.appendMention(candidate)
                 commentMentionTrigger.reset()
                 commentMentionQuery = nil

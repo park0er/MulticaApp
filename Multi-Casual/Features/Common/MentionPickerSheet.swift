@@ -4,6 +4,7 @@ import SwiftUI
 struct MentionCandidatePickerSheet: View {
     let candidates: [MentionCandidate]
     @Binding var query: String
+    var presence: [String: AgentPresenceSummary] = [:]
     let onSelect: (MentionCandidate) -> Void
     var onCancel: () -> Void = {}
     @Environment(\.dismiss) private var dismiss
@@ -57,7 +58,7 @@ struct MentionCandidatePickerSheet: View {
             onSelect(candidate)
         } label: {
             HStack(spacing: 12) {
-                AvatarView(name: candidate.displayName, avatarUrl: candidate.avatarUrl, kind: avatarKind(for: candidate), size: 32)
+                AvatarView(name: candidate.displayName, avatarUrl: candidate.avatarUrl, kind: avatarKind(for: candidate), size: 32, statusDot: statusDot(for: candidate))
                 VStack(alignment: .leading, spacing: 3) {
                     Text(candidate.displayName)
                         .font(.body)
@@ -88,6 +89,11 @@ struct MentionCandidatePickerSheet: View {
         }
         .buttonStyle(.plain)
     }
+    private func statusDot(for candidate: MentionCandidate) -> AvatarView.StatusDot? {
+        guard candidate.type == .agent else { return nil }
+        return presence[candidate.entityId]?.avatarStatusDot
+    }
+
 
     private func avatarKind(for candidate: MentionCandidate) -> AvatarView.Kind {
         switch candidate.type {

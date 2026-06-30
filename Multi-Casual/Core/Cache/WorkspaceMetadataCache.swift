@@ -114,6 +114,23 @@ public actor WorkspaceMetadataCache {
         projectsByKey.removeValue(forKey: key)
     }
 
+    /// Best-effort live presence for every agent in the workspace, keyed by
+    /// agent id. Combines the (cached) agent list with the runtime list and the
+    /// active-task snapshot, then derives the same working/idle/offline buckets
+    /// used by the Agents page. Presence is volatile, so this is computed fresh
+    /// each call (not cached) and never throws — a failure yields an empty map
+    /// so callers simply render avatars without a status dot.
+    public func agentPresence(workspaceId: String, api: APIClient) async -> [String: AgentPresenceSummary] {
+        async let agentsResult = try? agents(workspaceId: workspaceId, includeArchived: true, api: api)
+        async let runtimesResult = try? api.listRuntimes(workspaceId: workspaceId)
+        async let snapshotResult = try? api.getAgentTaskSnapshot(workspaceId: workspaceId)
+        let agents = await agentsResult ?? []
+        let runtimes = await runtimesResult ?? []
+        let tasks = await snapshotResult ?? []
+        guard !agents.isEmpty else { return [:] }
+        return AgentPresenceSummary.buildMap(agents: agents, runtimes: runtimes, tasks: tasks)
+    }
+
     public func removeAll() {
         membersByKey.removeAll()
         activeAgentsByKey.removeAll()
