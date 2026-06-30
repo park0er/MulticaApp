@@ -169,7 +169,7 @@ public struct SquadDetailView: View {
                     avatarUrl: vm.entityAvatarUrl(type: member.memberType, id: member.memberId),
                     kind: member.memberType == "agent" ? .agent : .user,
                     size: 28,
-                    statusDot: member.memberType == "agent" ? statusDot(status?.status) : nil
+                    statusDot: member.memberType == "agent" ? vm.presenceByAgentId[member.memberId]?.avatarStatusDot : nil
                 )
                 MarkdownText(vm.entityName(type: member.memberType, id: member.memberId))
                     .font(.body.weight(.medium))
@@ -292,16 +292,6 @@ public struct SquadDetailView: View {
         default: return nil
         }
         return AppStrings.localized(key, language: appLanguage)
-    }
-
-    private func statusDot(_ status: String?) -> AvatarView.StatusDot? {
-        switch status {
-        case "working": return .working
-        case "idle": return .idle
-        case "unstable": return .unstable
-        case "offline", "archived": return .offline
-        default: return nil
-        }
     }
 
     private static func relativeTime(_ date: Date) -> String {

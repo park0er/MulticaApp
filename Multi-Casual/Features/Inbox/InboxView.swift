@@ -36,7 +36,13 @@ public struct InboxView: View {
                             IssueDetailView(issueId: item.issueId)
                                 .task { await vm.markReadIfNeeded(id: item.id) }
                         } label: {
-                            InboxRow(item: item)
+                            InboxRow(
+                                item: item,
+                                actorName: vm.actorName(for: item),
+                                actorAvatarUrl: vm.actorAvatarUrl(for: item),
+                                actorKind: item.avatarActorType == "agent" ? .agent : .user,
+                                actorStatusDot: vm.actorPresence(for: item)?.avatarStatusDot
+                            )
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -188,8 +194,21 @@ public struct InboxView: View {
 
 private struct InboxRow: View {
     let item: InboxItem
+    var actorName: String = ""
+    var actorAvatarUrl: String? = nil
+    var actorKind: AvatarView.Kind = .user
+    var actorStatusDot: AvatarView.StatusDot? = nil
 
     var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            AvatarView(name: actorName, avatarUrl: actorAvatarUrl, kind: actorKind, size: 30, statusDot: actorStatusDot)
+                .padding(.top, 2)
+            content
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if let identifier = displayIdentifier {
@@ -236,7 +255,6 @@ private struct InboxRow: View {
             .font(.caption)
             .foregroundStyle(.secondary)
         }
-        .padding(.vertical, 6)
     }
 
     private var displayType: String {

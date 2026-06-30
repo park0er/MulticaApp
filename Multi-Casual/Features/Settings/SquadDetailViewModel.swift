@@ -9,6 +9,10 @@ public final class SquadDetailViewModel {
     public private(set) var agents: [Agent] = []
     public private(set) var workspaceMembers: [WorkspaceMember] = []
     public private(set) var memberStatusById: [String: SquadMemberStatus] = [:]
+    /// Live agent presence keyed by agent id, used for the member status dot so
+    /// online agents read green — identical to the Agents list (the server
+    /// status bucket is kept only for the text label / active issues).
+    public private(set) var presenceByAgentId: [String: AgentPresenceSummary] = [:]
     public var isLoading = false
     public var isMutating = false
     public var errorMessage: String?
@@ -51,6 +55,7 @@ public final class SquadDetailViewModel {
     /// pill rather than blocking the page.
     private func loadMemberStatus() async {
         guard let workspaceId else { return }
+        async let presenceResult = WorkspaceMetadataCache.shared.agentPresence(workspaceId: workspaceId, api: api)
         do {
             let response = try await api.getSquadMemberStatus(squadId: squad.id, workspaceId: workspaceId)
             var map: [String: SquadMemberStatus] = [:]
@@ -59,6 +64,7 @@ public final class SquadDetailViewModel {
         } catch {
             // keep whatever we had; presence is an enhancement.
         }
+        presenceByAgentId = await presenceResult
     }
 
     public func status(for member: SquadMember) -> SquadMemberStatus? {

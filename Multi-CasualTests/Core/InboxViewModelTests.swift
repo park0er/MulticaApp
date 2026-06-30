@@ -396,7 +396,14 @@ final class InboxViewModelTests: XCTestCase {
     private func makeClient(handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data)) -> APIClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [MockURLProtocol.self]
-        MockURLProtocol.handler = handler
+        MockURLProtocol.handler = { req in
+            let path = req.url?.path ?? ""
+            if path == "/api/runtimes" || path == "/api/agent-task-snapshot"
+                || path == "/api/agents" || path.hasSuffix("/members") {
+                return (HTTPURLResponse(url: req.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, Data("[]".utf8))
+            }
+            return try handler(req)
+        }
         return APIClient(session: URLSession(configuration: config), token: "test-token")
     }
 

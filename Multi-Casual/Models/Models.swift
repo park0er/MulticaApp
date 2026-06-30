@@ -2163,6 +2163,23 @@ public struct InboxItem: Codable, Identifiable, Sendable {
     public let read: Bool
     public let archived: Bool
     public let createdAt: Date
+    /// Who triggered the notification (web shows this actor's avatar, falling
+    /// back to the recipient when the actor is null / system).
+    public let actorType: String?
+    public let actorId: String?
+    public let recipientType: String?
+    public let recipientId: String?
+
+    /// The entity whose avatar represents this row: the actor when present
+    /// (and not a system actor), otherwise the recipient.
+    public var avatarActorType: String? {
+        if let actorType, actorType != "system", !actorType.isEmpty { return actorType }
+        return recipientType
+    }
+    public var avatarActorId: String? {
+        if let actorType, actorType != "system", !actorType.isEmpty { return actorId }
+        return recipientId
+    }
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -2173,6 +2190,10 @@ public struct InboxItem: Codable, Identifiable, Sendable {
         case issueStatus = "issue_status"
         case read, archived
         case createdAt = "created_at"
+        case actorType = "actor_type"
+        case actorId = "actor_id"
+        case recipientType = "recipient_type"
+        case recipientId = "recipient_id"
     }
 
     private enum DesktopCodingKeys: String, CodingKey {
@@ -2185,7 +2206,9 @@ public struct InboxItem: Codable, Identifiable, Sendable {
     public init(id: String, issueId: String, issueIdentifier: String, issueTitle: String,
                 type: String = "notification", body: String? = nil, severity: String? = nil,
                 issueStatus: IssueStatus = .unknown, read: Bool, archived: Bool = false,
-                createdAt: Date) {
+                createdAt: Date,
+                actorType: String? = nil, actorId: String? = nil,
+                recipientType: String? = nil, recipientId: String? = nil) {
         self.id = id
         self.issueId = issueId
         self.issueIdentifier = issueIdentifier
@@ -2197,6 +2220,10 @@ public struct InboxItem: Codable, Identifiable, Sendable {
         self.read = read
         self.archived = archived
         self.createdAt = createdAt
+        self.actorType = actorType
+        self.actorId = actorId
+        self.recipientType = recipientType
+        self.recipientId = recipientId
     }
 
     public init(from decoder: Decoder) throws {
@@ -2224,6 +2251,10 @@ public struct InboxItem: Codable, Identifiable, Sendable {
         read = try legacy.decode(Bool.self, forKey: .read)
         archived = try legacy.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         createdAt = try legacy.decode(Date.self, forKey: .createdAt)
+        actorType = try legacy.decodeIfPresent(String.self, forKey: .actorType)
+        actorId = try legacy.decodeIfPresent(String.self, forKey: .actorId)
+        recipientType = try legacy.decodeIfPresent(String.self, forKey: .recipientType)
+        recipientId = try legacy.decodeIfPresent(String.self, forKey: .recipientId)
     }
 }
 

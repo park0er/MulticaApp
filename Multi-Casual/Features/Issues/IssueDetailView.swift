@@ -599,6 +599,7 @@ public struct IssueDetailView: View {
             comment: comment,
             authorDisplayName: vm.commentAuthorName(for: comment),
             authorAvatarUrl: vm.commentAuthorAvatarURL(for: comment),
+            authorStatusDot: comment.authorType == "agent" ? vm.presenceByAgentId[comment.authorId]?.avatarStatusDot : nil,
             currentUserId: currentUserId,
             markdownContext: markdownContext,
             onStartReply: { comment in
@@ -981,7 +982,7 @@ public struct IssueDetailView: View {
                     .disabled(vm.isUploadingCommentAttachment || vm.isSubmittingComment)
                     .accessibilityIdentifier("IssueDetailAddCommentAttachmentButton")
 
-                    MentionPicker(candidates: vm.mentionCandidates) { candidate in
+                    MentionPicker(candidates: vm.mentionCandidates, presence: vm.presenceByAgentId) { candidate in
                         vm.appendMention(candidate)
                         commentMentionTrigger.reset()
                         focusComposer(.comment)
@@ -1142,7 +1143,7 @@ public struct IssueDetailView: View {
                     .disabled(isUploadingReplyAttachment || vm.isSubmittingComment)
                     .accessibilityIdentifier("CommentReplyAddAttachmentButton")
 
-                    MentionPicker(candidates: vm.mentionCandidates) { candidate in
+                    MentionPicker(candidates: vm.mentionCandidates, presence: vm.presenceByAgentId) { candidate in
                         IssueDetailViewModel.appendMention(candidate, to: &replyDraft, mentions: &replyDraftMentions)
                         replyMentionTrigger.reset()
                         focusComposer(.reply)
@@ -1507,6 +1508,7 @@ public struct CommentRowView: View {
     public let comment: Comment
     let authorDisplayName: String
     let authorAvatarUrl: String?
+    let authorStatusDot: AvatarView.StatusDot?
     let currentUserId: String?
     let markdownContext: MarkdownRenderContext
     let onStartReply: (Comment) -> Void
@@ -1533,6 +1535,7 @@ public struct CommentRowView: View {
         comment: Comment,
         authorDisplayName: String? = nil,
         authorAvatarUrl: String? = nil,
+        authorStatusDot: AvatarView.StatusDot? = nil,
         currentUserId: String? = nil,
         markdownContext: MarkdownRenderContext = .empty,
         onStartReply: @escaping (Comment) -> Void = { _ in },
@@ -1546,6 +1549,7 @@ public struct CommentRowView: View {
         self.comment = comment
         self.authorDisplayName = authorDisplayName ?? (comment.authorType == "agent" ? "Agent" : "Member")
         self.authorAvatarUrl = authorAvatarUrl
+        self.authorStatusDot = authorStatusDot
         self.currentUserId = currentUserId
         self.markdownContext = markdownContext
         self.onStartReply = onStartReply
@@ -1564,7 +1568,8 @@ public struct CommentRowView: View {
                     name: authorDisplayName,
                     avatarUrl: authorAvatarUrl,
                     kind: comment.authorType == "agent" ? .agent : .user,
-                    size: 24
+                    size: 24,
+                    statusDot: authorStatusDot
                 )
                 MarkdownText(authorDisplayName).font(.caption.bold())
                 if comment.isResolved {
@@ -1835,6 +1840,7 @@ private struct CollapseResolvedBar: View {
 private let quickReactionEmojis = ["👍", "👀", "🚀", "❤️", "🎉"]
 private struct MentionPicker: View {
     let candidates: [MentionCandidate]
+    var presence: [String: AgentPresenceSummary] = [:]
     let onSelect: (MentionCandidate) -> Void
     @Environment(\.appLanguage) private var appLanguage
     @State private var isPickerPresented = false
@@ -1851,7 +1857,7 @@ private struct MentionPicker: View {
         .disabled(candidates.isEmpty)
         .accessibilityLabel(AppStrings.localized("Mention", language: appLanguage))
         .sheet(isPresented: $isPickerPresented) {
-            MentionCandidatePickerSheet(candidates: candidates, query: $query) { candidate in
+            MentionCandidatePickerSheet(candidates: candidates, query: $query, presence: presence) { candidate in
                 onSelect(candidate)
                 query = ""
                 isPickerPresented = false

@@ -538,6 +538,26 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(item.severity, "attention")
         XCTAssertEqual(item.issueStatus, .inProgress)
         XCTAssertFalse(item.read)
+        XCTAssertEqual(item.actorType, "agent")
+        XCTAssertEqual(item.actorId, "a1")
+        XCTAssertEqual(item.recipientType, "member")
+        XCTAssertEqual(item.recipientId, "u1")
+        // Avatar represents the actor when present.
+        XCTAssertEqual(item.avatarActorType, "agent")
+        XCTAssertEqual(item.avatarActorId, "a1")
+    }
+
+    func test_inboxItem_avatarFallsBackToRecipientWhenActorIsSystem() throws {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let json = """
+        {"id":"n2","workspace_id":"w1","recipient_type":"member","recipient_id":"u9",
+         "actor_type":"system","actor_id":null,"type":"issue_assigned","title":"t",
+         "read":false,"created_at":"2026-01-01T00:00:00Z"}
+        """.data(using: .utf8)!
+        let item = try decoder.decode(InboxItem.self, from: json)
+        XCTAssertEqual(item.avatarActorType, "member")
+        XCTAssertEqual(item.avatarActorId, "u9")
     }
 
     func test_inboxItem_decodesLegacyShapeWithDisplayDefaults() throws {

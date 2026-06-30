@@ -40,6 +40,10 @@ public final class InboxViewModel {
     public var pendingArchiveItem: InboxItem?
     public var pendingBulkArchiveAction: InboxBulkArchiveAction?
     public var markingReadIds: Set<String> = []
+    /// Workspace directory + presence for rendering actor avatars on rows.
+    public private(set) var membersById: [String: WorkspaceMember] = [:]
+    public private(set) var agentsById: [String: Agent] = [:]
+    public private(set) var presenceByAgentId: [String: AgentPresenceSummary] = [:]
     private let pageSize = 50
     private let api: APIClient
     private let authSession: AuthSession
@@ -47,6 +51,37 @@ public final class InboxViewModel {
     public init(api: APIClient, authSession: AuthSession) {
         self.api = api
         self.authSession = authSession
+    }
+
+    /// Loads the member/agent directory + agent presence used to render row
+    /// avatars. Best-effort: failures simply leave rows with a fallback glyph.
+    public func loadDirectory() async {
+        guard let workspaceId = authSession.currentWorkspace?.id else { return }
+        async let membersResult = try? WorkspaceMetadataCache.shared.members(workspaceId: workspaceId, api: api)
+        async let agentsResult = try? WorkspaceMetadataCache.shared.agents(workspaceId: workspaceId, includeArchived: true, api: api)
+        async let presenceResult = WorkspaceMetadataCache.shared.agentPresence(workspaceId: workspaceId, api: api)
+        let members = await membersResult ?? []
+        let agents = await agentsResult ?? []
+        membersById = Dictionary(members.map { ($0.userId, $0) }, uniquingKeysWith: { first, _ in first })
+        agentsById = Dictionary(agents.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        presenceByAgentId = await presenceResult
+    }
+
+    public func actorName(for item: InboxItem) -> String {
+        guard let id = item.avatarActorId else { return "" }
+        if item.avatarActorType == "agent" { return agentsById[id]?.name ?? "Agent" }
+        return membersById[id]?.name ?? "Member"
+    }
+
+    public func actorAvatarUrl(for item: InboxItem) -> String? {
+        guard let id = item.avatarActorId else { return nil }
+        if item.avatarActorType == "agent" { return agentsById[id]?.avatarUrl }
+        return membersById[id]?.avatarUrl
+    }
+
+    public func actorPresence(for item: InboxItem) -> AgentPresenceSummary? {
+        guard item.avatarActorType == "agent", let id = item.avatarActorId else { return nil }
+        return presenceByAgentId[id]
     }
 
     public func loadNext() async {
@@ -70,6 +105,7 @@ public final class InboxViewModel {
         } catch {
             lastError = error
         }
+        await loadDirectory()
     }
 
     /// Manual / pull-to-refresh path. The system `.refreshable` overlay shows
@@ -108,6 +144,7 @@ public final class InboxViewModel {
             // Silent failure: keep existing items, do not flash an error for a
             // background refresh. A subsequent refresh retries.
         }
+        await loadDirectory()
     }
 
     public func refreshIfIdle() async {
