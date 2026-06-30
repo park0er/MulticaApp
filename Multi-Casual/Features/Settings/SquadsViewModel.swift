@@ -62,7 +62,7 @@ public final class SquadsViewModel {
     /// Agents eligible to lead a squad: active and attached to a runtime, matching
     /// the web LeaderPicker filter (`!a.archived_at && a.runtime_id`).
     public var leaderCandidates: [Agent] {
-        agents.filter { $0.archivedAt == nil && !($0.runtimeId ?? "").isEmpty }
+        agents.filter { $0.archivedAt == nil && !$0.runtimeId.isEmpty }
     }
 
     /// The display name for a squad's leader agent, if resolvable.
