@@ -866,7 +866,8 @@ public struct IssueDetailView: View {
                     AgentRunRowView(
                         run: run,
                         agentName: vm.agentName(for: run.agentId),
-                        agentAvatarUrl: vm.agentAvatarURL(for: run.agentId)
+                        agentAvatarUrl: vm.agentAvatarURL(for: run.agentId),
+                        statusDot: run.agentId.flatMap { vm.presenceByAgentId[$0]?.avatarStatusDot }
                     )
                 }
                 .buttonStyle(.plain)
@@ -2179,17 +2180,19 @@ public struct AgentRunRowView: View {
     public let run: AgentTask
     public let agentName: String?
     public let agentAvatarUrl: String?
+    public let statusDot: AvatarView.StatusDot?
 
-    public init(run: AgentTask, agentName: String? = nil, agentAvatarUrl: String? = nil) {
+    public init(run: AgentTask, agentName: String? = nil, agentAvatarUrl: String? = nil, statusDot: AvatarView.StatusDot? = nil) {
         self.run = run
         self.agentName = agentName
         self.agentAvatarUrl = agentAvatarUrl
+        self.statusDot = statusDot
     }
 
     public var body: some View {
         HStack {
             if let agentName {
-                AvatarView(name: agentName, avatarUrl: agentAvatarUrl, kind: .agent, size: 28)
+                AvatarView(name: agentName, avatarUrl: agentAvatarUrl, kind: .agent, size: 28, statusDot: statusDot)
             } else {
                 Image(systemName: statusIcon).foregroundStyle(statusColor)
             }
